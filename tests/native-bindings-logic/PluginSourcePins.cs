@@ -127,5 +127,22 @@ internal static class PluginSourcePins
             failures.Add("the copy observer must keep and log only a deck code, never other clipboard text");
         foreach (string forbidden in new[] { "systemCopyBuffer =", "CopyToClipboard" })
             if (hooks.Contains(forbidden, StringComparison.Ordinal)) failures.Add("the share observer must never write the clipboard: " + forbidden);
+        // STO-2 Wild mode: the match's random-effect pool follows the decks. A deck holding a Wild-only card draws from
+        // the Wild pool; every other deck keeps the Standard pool, so the pinned goldens stay on match-random/1. The
+        // engine side of this rule is proven by tests/engine-proof/WildPoolMatchProof.cs; this pin guards the wiring,
+        // which the CI engine-proof build cannot compile (plugin/NativeMatch.cs is client-only).
+        string nativeMatch = File.ReadAllText(Path.Combine(root, "plugin/NativeMatch.cs"));
+        if (!nativeMatch.Contains("internal SabberStoneCore.Config.GenerationFormat? RandomPoolFormat { get; set; }",
+                StringComparison.Ordinal))
+            failures.Add("NativeMatch lost its explicit random pool override");
+        if (!nativeMatch.Contains("PoolFormat = RandomPoolFormat ?? (OfflinePoolPolicy.Load().RequiresWildPool(humanCards.Concat(botCards))",
+                StringComparison.Ordinal))
+            failures.Add("NativeMatch must derive the random pool from both decks, with the explicit override winning");
+        if (nativeMatch.Contains("PoolFormat = SabberStoneCore.Config.GenerationFormat.Standard,", StringComparison.Ordinal))
+            failures.Add("NativeMatch still hardcodes the Standard pool");
+        // The replay side must derive the same pool, or a Wild match cannot be replayed from its record.
+        string simulation = File.ReadAllText(Path.Combine(root, "sim/HsSim/Simulation.cs"));
+        if (!simulation.Contains("PoolFormat = OfflinePoolPolicy.Load().RequiresWildPool(", StringComparison.Ordinal))
+            failures.Add("the replay side must derive the random pool from the decks like the live match");
     }
 }

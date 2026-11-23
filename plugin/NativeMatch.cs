@@ -592,6 +592,8 @@ public sealed class NativeMatch
     public int Seed => seed;
     // The pending record supplies this on launch/replay; null rolls only for a new standalone match.
     internal int? StartingPlayer { get; set; }
+    // Explicit pool override for tests and replays; null derives it from the decks (Wild-only cards need the Wild pool).
+    internal SabberStoneCore.Config.GenerationFormat? RandomPoolFormat { get; set; }
     public int FirstPlayer => Game?.FirstPlayer?.PlayerId ?? StartingPlayer ?? StableSeed.MatchFirstPlayer(seed);
     // The back draws from its own stream; DeckPet seeds Random with the raw match seed, so sharing it would pair pet and back.
     internal static int CoinSeed(int seed) => StableSeed.Derive(seed, 0x434F494E /* COIN */);
@@ -787,9 +789,11 @@ public sealed class NativeMatch
             History = true,
 #if ENGINE_SOURCE
             EnableCorpses = true,
-            // The live match is FT_WILD (the client shows the format), but random effects play the Standard pool.
-            // The pool policy is set explicitly; the Wild mode will set it from the deck's format.
-            PoolFormat = SabberStoneCore.Config.GenerationFormat.Standard,
+            // The live match is FT_WILD (the client shows the format), so the pool follows the decks instead:
+            // a deck holding a Wild-only card draws from the Wild pool, everything else keeps the Standard pool.
+            PoolFormat = RandomPoolFormat ?? (OfflinePoolPolicy.Load().RequiresWildPool(humanCards.Concat(botCards))
+                ? SabberStoneCore.Config.GenerationFormat.Wild
+                : SabberStoneCore.Config.GenerationFormat.Standard),
             Player1Sideboards = playerDeck?.Sideboards,
             Player2Sideboards = opponentDeck?.Sideboards,
 #endif

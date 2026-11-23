@@ -246,9 +246,14 @@ public static class Simulation
             EnableCorpses = true, // matches NativeMatch.Start: Corpses are tracked in every game (owner, 2026-10-21)
             LegacyPoolReplay = replay && record.ReplaySchema == 2,
             // An unversioned record replays on the frozen legacy lists, like unversioned Dark Gifts below. Live matches
-            // run as FT_WILD yet play the Standard pool, so the pool policy is set explicitly (the default).
+            // run as FT_WILD, so the pool follows the decks exactly as NativeMatch.Start derives it: a deck holding a
+            // Wild-only card draws from the Wild pool, and every Standard deck keeps the Standard pool, which is what
+            // every record written before Wild mode holds.
             UnversionedRandomPoolReplay = frozenRandomPools || replay && record.ReplaySchema == 3 && record.RandomPoolPolicyVersion == null,
-            PoolFormat = SabberStoneCore.Config.GenerationFormat.Standard,
+            PoolFormat = OfflinePoolPolicy.Load().RequiresWildPool(
+                first.Cards.Concat(second.Cards).Select(Cards.FromId))
+                ? SabberStoneCore.Config.GenerationFormat.Wild
+                : SabberStoneCore.Config.GenerationFormat.Standard,
             ReplayPools = pools,
             Player1Sideboards = Sideboards(first), Player2Sideboards = Sideboards(second),
 #endif
