@@ -35,7 +35,7 @@ internal static class WildStartChecks
             using (var profile = new LocalProfile(path))
             {
                 var cards = LocalDecks.Get("mage").CardIds;
-                cards[0] = "CS2_029";
+                cards[0] = "EX1_287";
                 profile.SaveDeck("Standard start", "HERO_08", cards);
                 Check(!profile.IsDeckComplete(profile.CustomDeck.Id), "Standard deck with an unowned card must stay incomplete");
             }
@@ -53,10 +53,10 @@ internal static class WildStartChecks
             string path = Path.Combine(root, "owned.xml");
             using (var profile = new LocalProfile(path))
             {
-                var owned = NativeUIProjection.StartOwned(profile, new[] { PastCard, "CS2_029" });
+                var owned = NativeUIProjection.StartOwned(profile, new[] { PastCard, "EX1_287" });
                 Check(owned.TryGetValue(PastCard, out int wild) && wild >= LocalEconomy.MaximumPlayset,
                     "StartOwned must raise a Wild-admitted card to a playset");
-                Check(!owned.TryGetValue("CS2_029", out int standard) || standard == 0,
+                Check(!owned.TryGetValue("EX1_287", out int standard) || standard == 0,
                     "StartOwned must not raise a Standard card");
             }
         }
