@@ -6,10 +6,11 @@ using PegasusShared;
 
 internal static partial class NativeUIProbe
 {
-    // SoloStone presents Standard everywhere: every local deck header, the picker, ladder medal and results screens.
+    // The deck format follows the native picker: Wild only when the picker selects Wild, Standard otherwise.
     // Offline the client has no set-rotation timings, so it classes every set Standard; the engine (always FT_WILD
     // internally) and LocalDecks/LocalCardCatalog keep enforcing the real meta pool. Not persisted: profiles store no format.
-    internal const FormatType LocalDeckFormat = FormatType.FT_STANDARD;
+    internal static FormatType LocalDeckFormat =>
+        Options.GetFormatType() == FormatType.FT_WILD ? FormatType.FT_WILD : FormatType.FT_STANDARD;
 
     // Live 2026-10-30: offline the client has no server-delivered King of the Underbelly subset (ALLOWED_SIDEBOARD_SUBSET
     // 19499 is empty), so DeckRule_SideboardSubset refused every contraband pick ("invalid cards in your sideboard",
@@ -364,7 +365,10 @@ internal static partial class NativeUIProbe
     }
 
     private static bool SupportedNativeEnvelope(CollectionDeck deck) => deck != null
-        && deck.Type == DeckType.NORMAL_DECK && deck.FormatType == LocalDeckFormat
+        // Decks saved before Wild existed carry FT_STANDARD in their header. Once the picker selects Wild,
+        // LocalDeckFormat is FT_WILD, so requiring equality would reject every one of those decks: accept both headers.
+        && deck.Type == DeckType.NORMAL_DECK
+        && (deck.FormatType == FormatType.FT_STANDARD || deck.FormatType == FormatType.FT_WILD)
         && deck.SourceType == DeckSourceType.DECK_SOURCE_TYPE_NORMAL
         && (!deck.HeroOverridden || LocalDecks.PlayerHeroes.Contains(NativeBaseHero(deck)))
         && deck.CreatedFromShareableDeck == null && SupportedSideboards(deck)
