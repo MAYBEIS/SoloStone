@@ -515,8 +515,8 @@ internal static partial class NativeUIProbe
             // Retail inferred 2 (medium confidence, docs/design/pet-xp.md). NativeMatch answers packets 68/67 and enforces the cap.
             MaxPetTreatsAllowedPerGame = NativeMatch.MaxPetTreatsPerGame
         };
-        // Standard ranked and Standard Casual are playable (GameUtils.IsFormatPlayable); Wild stays visible but disabled.
-        features.Games.Tournament = true; features.Games.Casual = true; features.Games.RankedStandard = true; features.Games.RankedWild = false;
+        // Standard, Wild and Casual are playable (GameUtils.IsFormatPlayable); Classic and Twist stay visible but disabled.
+        features.Games.Tournament = true; features.Games.Casual = true; features.Games.RankedStandard = true; features.Games.RankedWild = true;
         features.Collection.Manager = true; features.Collection.Crafting = CraftingLedgerRegistry.Current != null;
         // Upgrades consume Normal copies through the same atomic crafting ledger.
         features.EnableUpgradeToGolden = CraftingLedgerRegistry.Current != null;
