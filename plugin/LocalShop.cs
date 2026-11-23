@@ -1055,9 +1055,12 @@ public sealed partial class LocalProfile
     private static readonly Lazy<HashSet<string>> wildAdmittedIds = new Lazy<HashSet<string>>(() =>
         new HashSet<string>(OfflinePoolPolicy.Load().WildOnlyCardIds, StringComparer.Ordinal));
     internal static bool IsWildAdmittedCard(string id) => id != null && wildAdmittedIds.Value.Contains(id);
+    // The whole admitted set, for callers that need membership over many ids (the native collection pool).
+    internal static IReadOnlyCollection<string> IsWildAdmittedCardIds() => wildAdmittedIds.Value;
 #else
     // Without the engine source there is no pool manifest, so no card is Wild-admitted and every deck stays Standard.
     internal static bool IsWildAdmittedCard(string id) => false;
+    internal static IReadOnlyCollection<string> IsWildAdmittedCardIds() => Array.Empty<string>();
 #endif
     // Premium receipts must keep loading after a meta change: any collectible definition is a valid sold card.
     private static bool IsCollectibleCard(string id) {

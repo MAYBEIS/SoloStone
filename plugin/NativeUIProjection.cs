@@ -218,7 +218,7 @@ internal static class NativeUIProjection
     // entry for each id. Cards outside it exist natively only once owned (from the collection packet) and only in the
     // owned version, so they never list as missing and CanUpgradeCardToGolden answers NotUpgradable.
     internal static List<string> NativeCollectiblePool(IEnumerable<string> craftable, IEnumerable<LocalCardCount> owned = null) => Supported.Concat(CosmeticHeroPool)
-        .Concat(craftable ?? Enumerable.Empty<string>()).Concat(OwnedGrantOnlyIds(owned))
+        .Concat(craftable ?? Enumerable.Empty<string>()).Concat(OwnedGrantOnlyIds(owned)).Concat(WildAdmittedIds())
         .Distinct(StringComparer.Ordinal).OrderBy(id => id).ToList();
     private static bool AdmittedGrantOnly(string id) => LocalWelcomeGift.HistoricalCardIds.Contains(id)
         && LocalProfile.KnownLedgerCard(id) && LocalCardCatalog.InActiveMeta(SabberStoneCore.Model.Cards.FromId(id));
@@ -228,7 +228,12 @@ internal static class NativeUIProjection
     // (blue ghosts) into invalid ones. Keep the historical predicate and only add owned admitted grants.
     internal static bool IsNativeCollectible(string id, LocalProfile profile) =>
         Supported.Contains(id) || LocalDecks.TestStandardCardIds.Contains(id) || CosmeticHeroPool.Contains(id)
+        || WildAdmittedIds().Contains(id)
         || (AdmittedGrantOnly(id) && profile.TotalOwnedCount(id) > 0);
+    // The Wild pool's Past cards: visible and deckable in Wild, never owned (the pool grants them at deck start).
+    private static HashSet<string> WildAdmittedIds() => wildAdmittedIds.Value;
+    private static readonly Lazy<HashSet<string>> wildAdmittedIds = new Lazy<HashSet<string>>(() =>
+        new HashSet<string>(LocalProfile.IsWildAdmittedCardIds(), StringComparer.Ordinal));
     internal static readonly HashSet<string> Supported = new HashSet<string>(LocalEconomy.Catalog.Select(c => c.Id)
 #if STANDARD_PROOF
         .Concat(ProofDecks.Get("proof-mage").CardIds).Concat(ProofDecks.Get("proof-warrior").CardIds)
