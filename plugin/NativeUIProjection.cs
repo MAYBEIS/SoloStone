@@ -1031,10 +1031,20 @@ internal static class NativeUIProjection
                 throw new InvalidOperationException("Native loaner differs from immutable local deck.");
         }
     }
+    // Start-time ownership for a personal deck: Wild-admitted cards are owned by the Wild channel, so a deck that
+    // already passed IsDeckComplete must not fail this second, ledger-based check.
+    internal static Dictionary<string, int> StartOwned(LocalProfile profile, IEnumerable<string> ids)
+    {
+        var owned = TotalOwned(profile);
+        foreach (string id in ids ?? Enumerable.Empty<string>())
+            if (LocalProfile.IsWildAdmittedCard(id))
+                owned[id] = Math.Max(owned.TryGetValue(id, out int count) ? count : 0, LocalEconomy.MaximumPlayset);
+        return owned;
+    }
     // Start-time check of a personal deck: ownership here is the native total across versions
     // (per-version ownership is LocalProfile.IsDeckComplete's job, run before this).
     internal static void ValidateCustomStart(LocalProfile profile, long nativeId, LocalCustomDeck saved, LocalDeck resolved) =>
-        ValidateCustomSelection(nativeId, saved.Hero, saved.Cards.ToArray(), resolved.Hero, resolved.CardIds.ToArray(), TotalOwned(profile));
+        ValidateCustomSelection(nativeId, saved.Hero, saved.Cards.ToArray(), resolved.Hero, resolved.CardIds.ToArray(), StartOwned(profile, resolved.CardIds));
     internal static void ValidateCustomSelection(long nativeId, string savedHero, string[] savedIds,
         string nativeHero, string[] nativeIds, Dictionary<string, int> owned)
     {

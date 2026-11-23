@@ -1315,7 +1315,8 @@ public sealed partial class LocalProfile : IDisposable
             PlayableDeck(deck.Name, deck.Hero, deck.Cards, deck.Sideboards);
             // Retail CollectionDeck.CanCardBeAddedAsOwned (254477): a sideboard copy is owned only beyond the main deck's
             // copies, for every sideboard (Beatrix and Underbelly contraband alike), so ownership counts both together.
-            ValidateDeckOwnership(deck.CardEntries.Concat(deck.Sideboards.SelectMany(board => board.CardEntries)), true);
+            ValidateDeckOwnership(deck.CardEntries.Concat(deck.Sideboards.SelectMany(board => board.CardEntries)), true,
+                deck.Cards.Any(IsWildAdmittedCard));
             return true;
         } catch (ArgumentException) { return false; } catch (InvalidOperationException) { return false; }
     }
@@ -1411,6 +1412,11 @@ public sealed partial class LocalProfile : IDisposable
                 allCosmetics ? CheatPremiumCount(id, version) : 0);
     }
 
+    // Wild mode owns the manifest's Past cards through its own admission channel: a deck copy of a Wild-admitted
+    // card is always owned, so the start check must not read the Standard ledger for it.
+    internal static Func<string, int, int> WildDeckOwnedCount(Func<string, int, int> owned) =>
+        (id, version) => version == 0 && IsWildAdmittedCard(id) ? Math.Max(owned(id, version), LocalEconomy.MaximumPlayset) : owned(id, version);
+
     internal static List<string> RepairDeckPremiums(LocalProfileData profile, bool allCosmetics = false)
     {
         var owned = DeckOwnedCount(profile, allCosmetics);
@@ -1436,10 +1442,11 @@ public sealed partial class LocalProfile : IDisposable
         return LocalCrafting.MissingDeckSlots(deck, DeckOwnedCount(data, profileOptions.AllCosmetics));
     }
 
-    private void ValidateDeckOwnership(IEnumerable<LocalDeckCard> cards, bool normalToo)
+    private void ValidateDeckOwnership(IEnumerable<LocalDeckCard> cards, bool normalToo, bool wild = false)
     {
         var list = cards.ToList();
         var owned = DeckOwnedCount(data, profileOptions.AllCosmetics);
+        if (wild) owned = WildDeckOwnedCount(owned);
         var deck = new LocalCustomDeck { CardEntries = list };
         if (LocalCrafting.MissingDeckSlots(deck, owned, normalToo) > 0)
             throw new InvalidOperationException(normalToo ? "The local collection does not own this deck card."
