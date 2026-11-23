@@ -76,9 +76,9 @@ namespace SabberStoneCore.Model
             return !Metas.SelectMany(m => m.SetIds).Any(pair => pair.Value == (int)card.Set && !sets.Contains(pair.Key));
         }
 
-        /// <summary>True when any of these cards is Wild-only, so the match must draw from the Wild pool.</summary>
-        public bool RequiresWildPool(IEnumerable<Card> cards) =>
-            cards != null && cards.Any(card => card != null && wildOnlyIds.Contains(card.Id));
+        /// <summary>True when any of these cards is Wild-only, so the match must draw from the Wild pool. The installed
+        /// manifest owns the one implementation of the rule; a replay asks its own pinned manifest instead.</summary>
+        public bool RequiresWildPool(IEnumerable<Card> cards) => OfflinePoolManifest.Installed.RequiresWildPool(cards);
 
         public bool IsPackEligible(Card card) => card != null && !Metas.Any(m => m.ExtraCards.Contains(card.Id))
             && (Metas.SingleOrDefault(m => m.Id == ActiveMetaId)?.SetIds.Any(p => p.Key != "CORE" && p.Value == (int)card.Set)

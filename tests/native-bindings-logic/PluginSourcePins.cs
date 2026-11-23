@@ -140,9 +140,14 @@ internal static class PluginSourcePins
             failures.Add("NativeMatch must derive the random pool from both decks, with the explicit override winning");
         if (nativeMatch.Contains("PoolFormat = SabberStoneCore.Config.GenerationFormat.Standard,", StringComparison.Ordinal))
             failures.Add("NativeMatch still hardcodes the Standard pool");
-        // The replay side must derive the same pool, or a Wild match cannot be replayed from its record.
+        // The replay side must take the pool from the record, not from today's catalog: a card that moved between
+        // Standard and Past since the record was written would otherwise change the pool the replay draws from.
         string simulation = File.ReadAllText(Path.Combine(root, "sim/HsSim/Simulation.cs"));
-        if (!simulation.Contains("PoolFormat = OfflinePoolPolicy.Load().RequiresWildPool(", StringComparison.Ordinal))
-            failures.Add("the replay side must derive the random pool from the decks like the live match");
+        if (!simulation.Contains("PoolFormat = record.RandomPoolFormat != null", StringComparison.Ordinal))
+            failures.Add("a replay must take the random pool format from the record");
+        if (!simulation.Contains("record.RandomPoolFormat = game.PoolFormat == SabberStoneCore.Config.GenerationFormat.Wild", StringComparison.Ordinal))
+            failures.Add("a new record must pin the random pool format it played on");
+        if (!simulation.Contains("OfflinePoolPolicy.Load().RequiresWildPool(first.Cards.Concat(second.Cards).Select(Cards.FromId))", StringComparison.Ordinal))
+            failures.Add("a live game must derive the random pool from the decks like the live match");
     }
 }

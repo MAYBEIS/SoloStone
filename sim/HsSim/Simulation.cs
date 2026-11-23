@@ -23,6 +23,10 @@ public sealed class GameRecord
     // Records written before the random pool policy existed carry none and replay on the frozen legacy lists.
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public string RandomPoolPolicyVersion { get; set; }
+    // "Wild" when the game drew from the Wild pool; absent means Standard. A record written before Wild mode carries
+    // none and replays on the Standard pool, exactly as it was recorded, whatever today's catalog says about its decks.
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string RandomPoolFormat { get; set; }
     public string Id { get; set; }
     public string Suite { get; set; }
     public string Player { get; set; }
@@ -55,6 +59,10 @@ public sealed record DeckSpec(string Id, string Hero, string OpponentName, strin
 public static class Simulation
 {
     public static readonly string[] ModernIds = { "proof-mage", "proof-warrior" };
+    // The record's spellings of GenerationFormat. A record without the field is Standard, which is what every record
+    // written before Wild mode holds; "Standard" is accepted so a repair can pin a record explicitly.
+    public const string WildPoolFormat = "Wild";
+    public const string StandardPoolFormat = "Standard";
     public static DeckSpec Deck(string id)
     {
 #if SOURCE_ENGINE
@@ -215,6 +223,8 @@ public static class Simulation
                 throw new InvariantException("replay.dark-gift", "Dark Gift policy mismatch");
             if (record.RandomPoolPolicyVersion != null && record.RandomPoolPolicyVersion != SabberStoneCore.Model.RandomPools.MatchRandomPool.PolicyVersion)
                 throw new InvariantException("replay.random-pool", "random pool policy mismatch");
+            if (record.RandomPoolFormat != null && record.RandomPoolFormat != WildPoolFormat && record.RandomPoolFormat != StandardPoolFormat)
+                throw new InvariantException("replay.random-pool", "unknown random pool format");
             pools = manifest;
         }
 #else
@@ -245,15 +255,21 @@ public static class Simulation
 #if SOURCE_ENGINE
             EnableCorpses = true, // matches NativeMatch.Start: Corpses are tracked in every game (owner, 2026-10-21)
             LegacyPoolReplay = replay && record.ReplaySchema == 2,
-            // An unversioned record replays on the frozen legacy lists, like unversioned Dark Gifts below. Live matches
-            // run as FT_WILD, so the pool follows the decks exactly as NativeMatch.Start derives it: a deck holding a
-            // Wild-only card draws from the Wild pool, and every Standard deck keeps the Standard pool, which is what
-            // every record written before Wild mode holds.
+            // An unversioned record replays on the frozen legacy lists, like unversioned Dark Gifts below. A replay takes
+            // the pool format from the record itself, so it draws from the pool it was recorded on even when the installed
+            // catalog has since moved a card between Standard and Past. A live game derives it from the decks exactly as
+            // NativeMatch.Start does: a deck holding a Wild-only card draws from the Wild pool, and every Standard deck
+            // keeps the Standard pool.
             UnversionedRandomPoolReplay = frozenRandomPools || replay && record.ReplaySchema == 3 && record.RandomPoolPolicyVersion == null,
-            PoolFormat = OfflinePoolPolicy.Load().RequiresWildPool(
-                first.Cards.Concat(second.Cards).Select(Cards.FromId))
-                ? SabberStoneCore.Config.GenerationFormat.Wild
-                : SabberStoneCore.Config.GenerationFormat.Standard,
+            PoolFormat = record.RandomPoolFormat != null
+                ? record.RandomPoolFormat == WildPoolFormat
+                    ? SabberStoneCore.Config.GenerationFormat.Wild
+                    : SabberStoneCore.Config.GenerationFormat.Standard
+                : replay
+                    ? SabberStoneCore.Config.GenerationFormat.Standard
+                    : OfflinePoolPolicy.Load().RequiresWildPool(first.Cards.Concat(second.Cards).Select(Cards.FromId))
+                        ? SabberStoneCore.Config.GenerationFormat.Wild
+                        : SabberStoneCore.Config.GenerationFormat.Standard,
             ReplayPools = pools,
             Player1Sideboards = Sideboards(first), Player2Sideboards = Sideboards(second),
 #endif
@@ -271,6 +287,7 @@ public static class Simulation
             record.PoolManifestHash = game.OfflinePools.Hash;
             record.DarkGiftPolicyVersion = DarkGifts.PolicyVersion;
             record.RandomPoolPolicyVersion = frozenRandomPools ? null : SabberStoneCore.Model.RandomPools.MatchRandomPool.PolicyVersion;
+            record.RandomPoolFormat = game.PoolFormat == SabberStoneCore.Config.GenerationFormat.Wild ? WildPoolFormat : null;
         }
 #else
         if (!replay)

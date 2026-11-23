@@ -24,6 +24,7 @@ internal static class WildPoolMatchProof
         WildOnlyIds(policy, standardIds, pastIds, inactiveIds);
         RequiresWildPool(policy, standardIds, pastIds, inactiveIds);
         PoolFollowsThePolicy(standardIds, pastIds);
+        ReplayKeepsItsPool(policy);
 
         Console.WriteLine($"PASS wild pool match: {policy.WildOnlyCardIds.Count} Wild-only cards switch the pool, " +
             "a Standard deck keeps the Standard pool, and the pool policy version is unchanged");
@@ -82,6 +83,48 @@ internal static class WildPoolMatchProof
             $"the pool policy version stays match-random/1, got {MatchRandomPool.PolicyVersion}");
 
         Console.WriteLine($"  pools: Standard {standardPoolIds.Count}, Wild {wildPoolIds.Count} (+{added.Length})");
+    }
+
+    // A replay draws from the pool the record was played on, not from the pool today's catalog would pick for its decks.
+    // EX1_066 is a Past member in the installed catalog but absent from the pinned snapshot the goldens were recorded
+    // with, so a record written before Wild mode must still replay on the Standard pool.
+    private static void ReplayKeepsItsPool(OfflinePoolPolicy policy)
+    {
+        const string movedCard = "EX1_066";
+        Check(policy.WildOnlyCardIds.Contains(movedCard), "premise: " + movedCard + " is Wild-only in the installed catalog");
+        Check(!PinnedPoolFixture.Manifest.Past.Any(member => member.CardId == movedCard),
+            "premise: " + movedCard + " is not a Past member of the pinned snapshot");
+
+        var cards = new[] { movedCard }.Concat(Enumerable.Repeat("CS2_179", 29)).ToArray();
+        var deck = new HsSim.DeckSpec("wild-replay", "HERO_08", "Wild replay", cards);
+        HsSim.GameRecord Record() => new HsSim.GameRecord {
+            ReplaySchema = 3, Suite = "classic", Player = deck.Id, Opponent = deck.Id, Seed = 11, Policy = "random",
+            PoolPolicyVersion = PinnedPoolFixture.Manifest.PolicyVersion, PoolManifestHash = PinnedPoolFixture.Hash,
+            RandomPoolPolicyVersion = MatchRandomPool.PolicyVersion };
+
+        var legacy = HsSim.Simulation.Create(Record(), replay: true, pools: PinnedPoolFixture.Manifest,
+            playerDeck: deck, opponentDeck: deck);
+        Check(legacy.PoolFormat == GenerationFormat.Standard,
+            "a record without a pool format replays on the Standard pool even when its deck holds a card the installed catalog calls Wild-only");
+
+        var wild = Record(); wild.RandomPoolFormat = HsSim.Simulation.WildPoolFormat;
+        var wildGame = HsSim.Simulation.Create(wild, replay: true, pools: PinnedPoolFixture.Manifest,
+            playerDeck: deck, opponentDeck: deck);
+        Check(wildGame.PoolFormat == GenerationFormat.Wild, "a record that pinned the Wild pool replays on the Wild pool");
+
+        var standard = Record(); standard.RandomPoolFormat = HsSim.Simulation.StandardPoolFormat;
+        var standardGame = HsSim.Simulation.Create(standard, replay: true, pools: PinnedPoolFixture.Manifest,
+            playerDeck: deck, opponentDeck: deck);
+        Check(standardGame.PoolFormat == GenerationFormat.Standard, "a record that pinned the Standard pool replays on the Standard pool");
+
+        var corrupt = Record(); corrupt.RandomPoolFormat = "Bogus";
+        bool refused = false;
+        try
+        {
+            HsSim.Simulation.Create(corrupt, replay: true, pools: PinnedPoolFixture.Manifest, playerDeck: deck, opponentDeck: deck);
+        }
+        catch (HsSim.InvariantException error) when (error.Invariant == "replay.random-pool") { refused = true; }
+        Check(refused, "a record naming an unknown pool format is refused");
     }
 
     private static Game NewGame(GenerationFormat format)
