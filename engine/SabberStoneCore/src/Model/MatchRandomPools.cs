@@ -25,10 +25,12 @@ namespace SabberStoneCore.Model.RandomPools
         // Diagnostics only: (source card id or null, legacy?) for every accessor call. Tests and fuzz census set it.
         public static Action<string, bool> Census { get; set; }
 
-        // Hook for the Wild pool: cards that Wild adds on top of Standard. Empty until Wild pools exist.
+        // The Wild pool draws from the same source set OfflineCardPools.Candidates gives PoolScope.Wild:
+        // Standard plus the manifest's Past list. Each then applies its own eligibility rules below.
         // Never Cards.AllWild or the frozen legacy lists: those hold stub cards from unimplemented sets.
+        // Inactive members (the next meta's cards) stay out of every pool.
         internal static IReadOnlyList<OfflinePoolPolicy.Member> WildExtra(OfflinePoolManifest manifest) =>
-            Array.Empty<OfflinePoolPolicy.Member>();
+            manifest.Past;
 
         private sealed class Slot { public readonly ConcurrentDictionary<(GenerationFormat, PoolDestination), MatchRandomPool> Pools =
             new ConcurrentDictionary<(GenerationFormat, PoolDestination), MatchRandomPool>(); }
