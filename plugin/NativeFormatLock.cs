@@ -8,14 +8,14 @@ using Hearthstone.UI;
 using PegasusShared;
 using UnityEngine;
 
-// SoloStone plays Standard ranked and Standard Casual (#37; NativeUIProbe.LocalDeckFormat). The deck picker's format toggle
-// opens the native picker, where Standard and Casual are selectable: Wild (and Classic/Twist if a layout shows them)
+// SoloStone plays Standard, Wild and Casual (#37; NativeUIProbe.LocalDeckFormat). The deck picker's format toggle
+// opens the native picker, where Standard, Wild and Casual are selectable: Classic and Twist (if a layout shows them)
 // stay visible, greyed and click-dead, with a "Coming later" note on hover. Greyed the native way: Clickable.Active = false
 // plays the button's own authored "inactive" state and stops its click states (as the client disables a widget button);
 // the hover listener stays live, and the art is desaturated and dimmed through property blocks that survive state swaps.
 // Every other way into another mode is coerced:
 // Options.SetFormatType (hero picker, set filter, tutorials) and DeckPickerTrayDisplay.SwitchFormatTypeAndRankedPlayMode
-// (picker events, adventure/set-rotation flows) land on Standard or Casual; the choice is kept in
+// (picker events, adventure/set-rotation flows) land on Standard, Wild or Casual; the choice is kept in
 // NativeUIProjection.CasualPlayMode (IN_RANKED_PLAY_MODE reads its inverse) and remembered per save.
 // Update runs every frame inside the probe's Update: it never throws; a failure logs once and disables the visual lock
 // (the coercions above still keep the client Standard).
@@ -72,7 +72,9 @@ internal static class NativeFormatLock
 
     private static void StandardFormat(ref FormatType __0)
     {
-        if (!NativeUIProbe.IsolatedLaunch || __0 == FormatType.FT_UNKNOWN || __0 == NativeUIProbe.LocalDeckFormat) return;
+        if (!NativeUIProbe.IsolatedLaunch || __0 == FormatType.FT_UNKNOWN) return;
+        // Standard and Wild are both playable; Classic and Twist are not, so they land on the current format.
+        if (__0 == FormatType.FT_STANDARD || __0 == FormatType.FT_WILD) return;
         log?.LogInfo("NATIVE_FORMAT options " + __0 + " kept " + NativeUIProbe.LocalDeckFormat);
         __0 = NativeUIProbe.LocalDeckFormat;
     }
@@ -80,7 +82,8 @@ internal static class NativeFormatLock
     private static void StandardMode(ref VisualsFormatType __0)
     {
         if (!NativeUIProbe.IsolatedLaunch) return;
-        if (__0 != VisualsFormatType.VFT_STANDARD && __0 != VisualsFormatType.VFT_CASUAL)
+        // Standard, Wild and Casual are playable; Classic and Twist are not, so they land on Standard.
+        if (__0 != VisualsFormatType.VFT_STANDARD && __0 != VisualsFormatType.VFT_WILD && __0 != VisualsFormatType.VFT_CASUAL)
         {
             log?.LogInfo("NATIVE_FORMAT mode " + __0 + " kept VFT_STANDARD");
             __0 = VisualsFormatType.VFT_STANDARD;
