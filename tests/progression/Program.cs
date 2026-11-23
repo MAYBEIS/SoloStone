@@ -50,6 +50,7 @@ if (args.Length == 0)
     try { DeckPremiumChecks.Run(premiumRoot); } finally { Directory.Delete(premiumRoot, true); }
     CraftingChecks.Run();
     WildOwnershipChecks.Run();
+    WildStartChecks.Run();
     TurnTimerOptionChecks.Run();
     FpsCounterOptionChecks.Run();
     DeckInferenceOptionChecks.Run();
