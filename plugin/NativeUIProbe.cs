@@ -978,21 +978,25 @@ internal static partial class NativeUIProbe
     {
         var displayable = manager.GetDisplayableCardSets();
         var supportedIds = NativeUIProjection.Supported.Concat(Profile.OwnedCards.Where(card => card.Count > 0
-            && NativeUIProjection.IsNativeCollectible(card.Id, Profile)).Select(card => card.Id)).Distinct().OrderBy(id => id).ToArray();
-        var supportedSets = supportedIds.Select(id => DefLoader.Get().GetEntityDef(id).GetCardSet());
+            && NativeUIProjection.IsNativeCollectible(card.Id, Profile)).Select(card => card.Id))
+            .Concat(LocalProfile.IsWildAdmittedCardIds()).Distinct().OrderBy(id => id).ToArray();
+        var supportedSets = supportedIds.Select(id => DefLoader.Get().GetEntityDef(id)).Where(def => def != null).Select(def => def.GetCardSet());
         var union = NativeUIProjection.DisplayableSetIds(displayable.Concat(supportedSets).Select(set => (int)set), Profile.OwnedCards)
             .Select(set => (TAG_CARD_SET)set).ToList();
         displayable.Clear();
         displayable.AddRange(union);
         var wild = new HashSet<TAG_CARD_SET>(GameUtils.GetAllWildPlayableSets());
-        // Local decks are Standard (LocalDeckFormat): without server set-rotation timings no set is rotated offline, so
-        // every displayable set is Standard. An owned card outside it would read as Wild-only, so stop at boot instead.
+        // Local decks are Standard or Wild (LocalDeckFormat): without server set-rotation timings no set is rotated offline.
+        // The Wild pool's Past cards are listed here but never owned (the pool grants them at deck start), so the owned-card
+        // guard below cannot fire for them.
         var standard = new HashSet<TAG_CARD_SET>(GameUtils.GetStandardSets());
         var audit = new List<string> { "id\tsetInt\tsetName\tnativeFormat\trotated\tlegacy\tdisplayable\tallWildMembership\tstandardMembership" };
         var missingOwned = new List<string>();
         foreach (string id in supportedIds)
         {
-            TAG_CARD_SET set = DefLoader.Get().GetEntityDef(id).GetCardSet();
+            var def = DefLoader.Get().GetEntityDef(id);
+            if (def == null) continue;
+            TAG_CARD_SET set = def.GetCardSet();
             bool inDisplayable = displayable.Contains(set), inWild = wild.Contains(set), inStandard = standard.Contains(set);
             audit.Add(id + "\t" + (int)set + "\t" + set + "\t" + GameUtils.GetCardSetFormat(set) + "\t"
                 + GameUtils.IsSetRotated(set) + "\t" + GameUtils.IsLegacySet(set) + "\t" + inDisplayable + "\t" + inWild + "\t" + inStandard);
