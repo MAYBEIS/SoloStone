@@ -1732,7 +1732,7 @@ public sealed partial class LocalProfile : IDisposable
     private static IEnumerable<LocalCustomDeck> VisibleDrafts(LocalProfileData profile)
     {
         return profile.CustomDecks.Where(deck => LocalDecks.PlayerHeroes.Contains(deck.Hero)
-            && deck.Cards.All(id => LedgerCardIndex.ContainsKey(id) || LocalDecks.IsCustomCard(id))
+            && deck.Cards.All(id => LedgerCardIndex.ContainsKey(id) || LocalDecks.IsCustomCard(id) || IsWildAdmittedCard(id))
             && deck.Sideboards.SelectMany(row => row.Cards).All(id => LocalCardCatalog.InActiveMeta(SabberStoneCore.Model.Cards.FromId(id))))
             .OrderBy(deck => deck.SortOrder).ThenBy(deck => deck.Id).Take(MaximumCustomDecks);
     }
@@ -2049,8 +2049,10 @@ public sealed partial class LocalProfile : IDisposable
                 foreach (var board in saved.Sideboards) ValidateDeckEntries(board?.CardEntries, profile.Version);
                 if (saved.Cards == null || saved.Cards.Count > LocalDecks.DraftLimit(saved.Cards))
                     throw new InvalidOperationException("Local draft exceeds its deck-size limit.");
-                if (profile.Version >= 10 && NeedsExpandedDeckCatalog(saved.Cards))
-                    LocalShop.ValidateDeck(saved.Name, saved.Hero, saved.Cards.Where(id => !LocalCardCatalog.IsCore(id)), saved.Sideboards, false, true, standardOnly: false);
+                // A saved Wild deck holds manifest Past cards, which the Standard stored-draft check rejects as unknown.
+                bool wild = saved.Cards.Any(IsWildAdmittedCard);
+                if (profile.Version >= 10 && (wild || NeedsExpandedDeckCatalog(saved.Cards)))
+                    LocalShop.ValidateDeck(saved.Name, saved.Hero, saved.Cards.Where(id => !LocalCardCatalog.IsCore(id)), saved.Sideboards, false, true, standardOnly: false, wild: wild);
                 else LocalDecks.ValidateStoredDraft(saved.Name, saved.Hero, saved.Cards);
                 new LocalDeck(saved.Name, saved.Hero, saved.Cards.ToArray()).WithSideboards(saved.Sideboards, allowInactive: true);
                 if (profile.Version < 10) ValidateSideboardOwnership(saved.Sideboards, OwnedCollection(profile));

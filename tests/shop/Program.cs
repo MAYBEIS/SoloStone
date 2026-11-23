@@ -62,6 +62,24 @@ try {
     }
     using (var p = new LocalProfile(mixedPath))
         Check(p.CustomDeck.Cards.Contains("CS2_029") && p.CustomDeck.Cards.Contains("CATA_452"), "mixed draft survives reload");
+    // Wild admission is a channel parallel to the Standard ledger: a manifest Past card is owned in a Wild deck and
+    // still rejected by the Standard rules, which never consult it.
+    Check(LocalProfile.IsWildAdmittedCard("AT_004"), "manifest Past card is Wild-admitted");
+    Check(!LocalProfile.KnownLedgerCard("AT_004"), "Past card stays outside the Standard ledger");
+    Check(LocalProfile.LedgerDeck("Wild draft", "HERO_08", new[] { "AT_004" }, null, false).CardIds.Contains("AT_004"),
+        "Wild deck admits a Past card");
+    Reject(() => LocalShop.ValidateDeck("Standard draft", "HERO_08", new[] { "AT_004" }, null, false),
+        "Standard deck still rejects a Past card");
+    // A saved Wild deck must load again: the stored-draft check knows no Past card, so the ledger path has to take it.
+    string wildPath = Fresh("wild-draft");
+    using (var p = new LocalProfile(wildPath)) {
+        var wildCards = LocalDecks.Get("mage").CardIds;
+        wildCards[0] = "AT_004";
+        p.SaveDeck("Wild draft", "HERO_08", wildCards);
+        Check(p.CustomDeck.Cards.Contains("AT_004"), "Wild deck saves a Past card");
+    }
+    using (var p = new LocalProfile(wildPath))
+        Check(p.CustomDeck.Cards.Contains("AT_004"), "Wild deck survives reload");
     Check(typeof(LocalMatchRecord).GetField("Ladder") != null, "settlement must reserve durable ladder receipt");
     var library = RecipeLibrary.LoadText(File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "recipes-v1.json")));
     var shop = LocalShop.Default;

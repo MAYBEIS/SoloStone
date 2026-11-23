@@ -581,11 +581,11 @@ public sealed class LocalShop
         .Concat(Cards.All.Where(card => IsActiveExtraCard(card.Id) && IsStandardCard(card)))
 #endif
         ;
-    internal static void ValidateDeck(string name, string hero, IEnumerable<string> ids, IEnumerable<LocalSideboard> sideboards, bool complete, bool stored = false, bool standardOnly = true) {
+    internal static void ValidateDeck(string name, string hero, IEnumerable<string> ids, IEnumerable<LocalSideboard> sideboards, bool complete, bool stored = false, bool standardOnly = true, bool wild = false) {
         var cards = ids?.ToArray() ?? throw new InvalidOperationException("Missing deck cards.");
         if (string.IsNullOrWhiteSpace(name) || name.Length > 32 || name.Any(char.IsControl) || !LocalCoreProgression.Heroes.Contains(hero)
             || cards.Length > (complete ? LocalDecks.DeckSize(cards) : LocalDecks.DraftLimit(cards)) || (complete && cards.Length != LocalDecks.DeckSize(cards))
-            || cards.Any(id => !LocalProfile.KnownLedgerCard(id))
+            || cards.Any(id => !LocalProfile.KnownLedgerCard(id) && !(wild && LocalProfile.IsWildAdmittedCard(id)))
             // A stored deck may hold copies allowed under an older rarity; play and saving enforce today's limit.
             || cards.GroupBy(id => id).Any(group => group.Count() > (stored ? LocalEconomy.MaximumPlayset : LocalEconomy.PlayableCap(Cards.FromId(group.Key))))
             || (!stored && !LocalCardCatalog.WithinCopyLimits(cards))
@@ -1021,8 +1021,10 @@ public sealed partial class LocalProfile
     }
     internal static LocalDeck LedgerDeck(string name, string hero, IEnumerable<string> ids, IEnumerable<LocalSideboard> sideboards, bool complete) {
         var cards = ids?.ToArray() ?? throw new ArgumentNullException(nameof(ids));
-        if (!NeedsExpandedDeckCatalog(cards)) return (complete ? LocalDecks.Custom(name, hero, cards) : LocalDecks.Draft(name, hero, cards)).WithSideboards(sideboards, complete);
-        LocalShop.ValidateDeck(name, hero, cards, sideboards, complete, standardOnly: false);
+        // A deck holding a Wild-only card is a Wild deck: it takes the ledger path, which admits those cards.
+        bool wild = cards.Any(IsWildAdmittedCard);
+        if (!wild && !NeedsExpandedDeckCatalog(cards)) return (complete ? LocalDecks.Custom(name, hero, cards) : LocalDecks.Draft(name, hero, cards)).WithSideboards(sideboards, complete);
+        LocalShop.ValidateDeck(name, hero, cards, sideboards, complete, standardOnly: false, wild: wild);
         return new LocalDeck(name, hero, cards).WithSideboards(sideboards, complete);
     }
     // The one card universe of a complete personal deck: deck completeness, the start checks and the match itself
@@ -1047,6 +1049,16 @@ public sealed partial class LocalProfile
         ledgerCards.Value.ToDictionary(card => card.Id, StringComparer.Ordinal));
     private static Dictionary<string, EngineCard> LedgerCardIndex => ledgerCardIndex.Value;
     internal static bool KnownLedgerCard(string id) => id != null && (LedgerCardIndex.ContainsKey(id) || LocalCoreProgression.IsAvailable(id));
+    // Wild admission is a channel parallel to KnownLedgerCard: the manifest's Past cards are owned in a Wild deck even
+    // though no collection, pack or craft path grants them. Standard decks never consult it, so their rules are unchanged.
+#if ENGINE_SOURCE
+    private static readonly Lazy<HashSet<string>> wildAdmittedIds = new Lazy<HashSet<string>>(() =>
+        new HashSet<string>(OfflinePoolPolicy.Load().WildOnlyCardIds, StringComparer.Ordinal));
+    internal static bool IsWildAdmittedCard(string id) => id != null && wildAdmittedIds.Value.Contains(id);
+#else
+    // Without the engine source there is no pool manifest, so no card is Wild-admitted and every deck stays Standard.
+    internal static bool IsWildAdmittedCard(string id) => false;
+#endif
     // Premium receipts must keep loading after a meta change: any collectible definition is a valid sold card.
     private static bool IsCollectibleCard(string id) {
         try { return Cards.FromId(id)?.Collectible == true; } catch (KeyNotFoundException) { return false; }
