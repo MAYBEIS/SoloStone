@@ -12,6 +12,8 @@ using SabberStoneCore.Model.RandomPools;
 internal static class WildPoolSupersetProof
 {
     // Standard 1139 + Past 108. The catalog also holds 130 Inactive members, which Wild must never reach.
+    // Update this when a card data sync changes the catalog: the count is pinned on purpose, so a silent pool
+    // change fails here instead of shipping.
     private const int WildMemberCount = 1247;
 
     private static void Check(bool value, string message) => Core2026Proof.Check(value, "wild pool: " + message);
@@ -58,7 +60,7 @@ internal static class WildPoolSupersetProof
         Check(inactiveIds.SetEquals(declared), "Inactive is exactly the catalog members outside Standard and Past");
         Check(inactiveIds.Count > 0, "premise: the catalog holds Inactive members");
         Check(standardIds.Count + pastIds.Count + inactiveIds.Count == catalogIds.Count,
-            "Standard, Past and Inactive partition the catalog");
+            "documentation: Standard, Past and Inactive partition the catalog");
         return inactiveIds;
     }
 
@@ -70,29 +72,31 @@ internal static class WildPoolSupersetProof
 
         // (4) Neither list repeats a dbfId, and the two lists never share one. The manifest constructor already
         // refuses a duplicate catalog identity; this pins the split that Wild is built from.
-        Check(standard.Select(m => m.DbfId).Distinct().Count() == standard.Count, "manifest Standard repeats no dbfId");
-        Check(past.Select(m => m.DbfId).Distinct().Count() == past.Count, "manifest Past repeats no dbfId");
+        // OfflinePoolManifest.cs:52-55 already refuses a duplicate catalog identity across all members, so these
+        // restate the constructor's guarantee; they are here to document the split Wild is built from.
+        Check(standard.Select(m => m.DbfId).Distinct().Count() == standard.Count, "documentation: manifest Standard repeats no dbfId");
+        Check(past.Select(m => m.DbfId).Distinct().Count() == past.Count, "documentation: manifest Past repeats no dbfId");
         Check(standard.Select(m => m.CardId).Distinct(StringComparer.Ordinal).Count() == standard.Count,
-            "manifest Standard repeats no cardId");
+            "documentation: manifest Standard repeats no cardId");
         Check(past.Select(m => m.CardId).Distinct(StringComparer.Ordinal).Count() == past.Count,
-            "manifest Past repeats no cardId");
+            "documentation: manifest Past repeats no cardId");
         Check(!standard.Select(m => m.DbfId).ToHashSet().Overlaps(past.Select(m => m.DbfId)),
-            "Standard and Past share no dbfId");
-        Check(!standardIds.Overlaps(pastIds), "Standard and Past share no cardId");
+            "documentation: Standard and Past share no dbfId");
+        Check(!standardIds.Overlaps(pastIds), "documentation: Standard and Past share no cardId");
 
         // (2) Wild = Standard union Past, and that union is exactly 1247 cards.
         var wildIds = standardIds.Union(pastIds).ToHashSet(StringComparer.Ordinal);
-        Check(wildIds.Count == standard.Count + past.Count, "the union adds no member twice");
+        Check(wildIds.Count == standard.Count + past.Count, "documentation: the union adds no member twice");
         Check(wildIds.Count == WildMemberCount,
             $"Wild is {WildMemberCount} cards, got {wildIds.Count} (Standard {standard.Count} + Past {past.Count})");
 
         // (3) Wild holds no Inactive member.
-        Check(!wildIds.Overlaps(inactiveIds), "Wild holds no Inactive member");
+        Check(!wildIds.Overlaps(inactiveIds), "documentation: Wild holds no Inactive member");
 
         // The manifest is the installed policy's own catalog, not a fixture.
         Check(manifest.PolicyVersion == policy.PolicyVersion, "the manifest carries the installed policy version");
         Check(standard.Count + past.Count + inactiveIds.Count == policy.Members.Count,
-            "the manifest accounts for every catalog member");
+            "documentation: the manifest accounts for every catalog member");
     }
 
     // The policy-level Wild view: Standard union Past, derived from the member scopes rather than a catalog meta.
@@ -104,13 +108,15 @@ internal static class WildPoolSupersetProof
 
         Check(wild.Count == standardIds.Count + pastIds.Count,
             $"the policy Wild pool is {wild.Count} members, Standard {standardIds.Count} + Past {pastIds.Count}");
-        Check(standardIds.IsSubsetOf(wildIds), "the policy Wild pool keeps every Standard member");
-        Check(pastIds.IsSubsetOf(wildIds), "the policy Wild pool holds every Past member");
-        Check(!wildIds.Overlaps(inactiveIds), "the policy Wild pool holds no Inactive member");
-        Check(wild.Select(m => m.DbfId).Distinct().Count() == wild.Count, "the policy Wild pool repeats no dbfId");
+        // OfflinePoolPolicy.cs:52 builds WildPool as members.Where(scope != "Inactive").OrderBy(dbfId), so the
+        // following follow from that line; :105 above is the one that measures the result.
+        Check(standardIds.IsSubsetOf(wildIds), "documentation: the policy Wild pool keeps every Standard member");
+        Check(pastIds.IsSubsetOf(wildIds), "documentation: the policy Wild pool holds every Past member");
+        Check(!wildIds.Overlaps(inactiveIds), "documentation: the policy Wild pool holds no Inactive member");
+        Check(wild.Select(m => m.DbfId).Distinct().Count() == wild.Count, "documentation: the policy Wild pool repeats no dbfId");
         Check(wild.Select(m => m.DbfId).SequenceEqual(wild.Select(m => m.DbfId).OrderBy(id => id)),
-            "the policy Wild pool is ordered by dbfId");
-        Check(wild.All(m => m.Scope != "Inactive"), "no member of the policy Wild pool declares the Inactive scope");
+            "documentation: the policy Wild pool is ordered by dbfId");
+        Check(wild.All(m => m.Scope != "Inactive"), "documentation: no member of the policy Wild pool declares the Inactive scope");
     }
 
     // The one line under test: WildExtra is the manifest's Past list, not an empty list and not AllWild.
@@ -142,7 +148,7 @@ internal static class WildPoolSupersetProof
         // (2) Wild adds only Past members.
         Check(wildIds.IsSubsetOf(wildManifestIds), "the Wild pool adds only manifest Past members");
         // (3) Wild never adds an Inactive card.
-        Check(!wildIds.Overlaps(inactiveIds), "the Wild pool holds no Inactive card");
+        Check(!wildIds.Overlaps(inactiveIds), "documentation: the Wild pool holds no Inactive card");
         Check(wildIds.Count > standardPoolIds.Count, "premise: Past adds cards to the Wild pool");
         // The pool is the filtered subset of the 1247-member manifest, so its size is smaller by design.
         Check(wildIds.Count < WildMemberCount, "the pool is the filtered subset of the 1247-member manifest");
@@ -158,7 +164,7 @@ internal static class WildPoolSupersetProof
         var added = wildMembers.Skip(standardMembers.Count).ToArray();
         Check(added.Length > 0, "premise: Past contributes members to the Wild pool");
         Check(added.All(m => pastIds.Contains(m.CardId)), "every member Wild adds is a manifest Past member");
-        Check(added.All(m => !standardIds.Contains(m.CardId)), "no member Wild adds is already a Standard member");
+        Check(added.All(m => !standardIds.Contains(m.CardId)), "documentation: no member Wild adds is already a Standard member");
 
         // Cross-check against the other Wild definition: OfflineCardPools.Candidates(PoolScope.Wild) is the
         // membership the WildExtra comment points at. The match pool applies extra exclusions, so it must be a
@@ -168,7 +174,7 @@ internal static class WildPoolSupersetProof
         var candidateIds = candidates.Select(c => c.Id).ToHashSet(StringComparer.Ordinal);
         Check(wildIds.IsSubsetOf(candidateIds), "the Wild pool stays inside OfflineCardPools' Wild candidates");
         Check(candidateIds.IsSubsetOf(wildManifestIds), "the Wild candidates add only manifest Past members");
-        Check(!candidateIds.Overlaps(inactiveIds), "the Wild candidates hold no Inactive card");
+        Check(!candidateIds.Overlaps(inactiveIds), "documentation: the Wild candidates hold no Inactive card");
         Check(candidateIds.Count > standardPoolIds.Count, "premise: the Wild candidates are larger than the Standard pool");
 
         Console.WriteLine($"  members: Standard {standardMembers.Count}, Wild {wildMembers.Count} (+{added.Length}), " +

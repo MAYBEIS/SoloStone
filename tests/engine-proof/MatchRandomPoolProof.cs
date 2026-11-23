@@ -147,8 +147,8 @@ internal static class MatchRandomPoolProof
         var standardIds = standard.All.Select(c => c.Id).ToHashSet();
         var pastIds = manifest.Past.Select(m => m.CardId).ToHashSet();
         var wildIds = wild.All.Select(c => c.Id).ToHashSet();
-        // The two load-bearing checks: :151 catches WildExtra reading AllWild, :152 catches it going back to
-        // empty. The rest document the shape and are implied by them once :151 holds.
+        // The two load-bearing checks: :152 catches WildExtra reading AllWild, :153 catches it going back to
+        // empty. The rest document the shape and are implied by them once :152 holds.
         Check(wildIds.IsSubsetOf(standardIds.Concat(pastIds).ToHashSet()), "Wild adds only manifest Past members");
         Check(wildIds.Count > standardIds.Count, "premise: the Past list adds cards to Wild");
         Check(standardIds.IsSubsetOf(wildIds), "documentation: Wild keeps every Standard card");

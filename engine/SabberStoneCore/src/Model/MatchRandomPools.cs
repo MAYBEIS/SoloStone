@@ -29,6 +29,9 @@ namespace SabberStoneCore.Model.RandomPools
         // Standard plus the manifest's Past list. Each then applies its own eligibility rules below.
         // Never Cards.AllWild or the frozen legacy lists: those hold stub cards from unimplemented sets.
         // Inactive members (the next meta's cards) stay out of every pool.
+        // The ORDER differs from OfflineCardPools on purpose: this pool appends the Past block after the Standard
+        // block, while OfflineCardPools sorts the union by dbfId. Same membership, different draw order for a given
+        // seed, so the two are not interchangeable and neither may be swapped in for the other.
         internal static IReadOnlyList<OfflinePoolPolicy.Member> WildExtra(OfflinePoolManifest manifest) =>
             manifest.Past;
 
