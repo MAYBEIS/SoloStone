@@ -1104,8 +1104,8 @@ internal static class NativeUIProjection
         }
         return null;
     }
-    // SoloStone plays Standard ranked and Standard Casual (#37): every other picker mode stays visible but disabled.
-    internal static bool IsDisabledFormatMode(string mode) => mode != null && mode != "STANDARD" && mode != "CASUAL";
+    // SoloStone plays Standard, Wild and Casual (#37, Wild pool = Standard + Past): Classic and Twist stay visible but disabled.
+    internal static bool IsDisabledFormatMode(string mode) => mode != null && mode != "STANDARD" && mode != "WILD" && mode != "CASUAL";
     // The native picker's Standard/Casual choice (NativeFormatLock.StandardMode keeps it; boot restores the save's
     // LocalProfile.PrefersCasual). IN_RANKED_PLAY_MODE reads its inverse, so the client renders Casual natively.
     internal static bool CasualPlayMode;
