@@ -129,6 +129,38 @@ internal static class WildStartChecks
         finally { Directory.Delete(root, true); }
     }
 
+    // The player's real path: pick Wild, build a Wild deck, relaunch, still Wild, and the deck still starts.
+    private static void WildStart_FormatAndDeckSurviveTogether()
+    {
+        string root = Path.Combine(Path.GetTempPath(), "hs-wildstart-" + Guid.NewGuid());
+        Directory.CreateDirectory(root);
+        try
+        {
+            string path = Path.Combine(root, "together.xml");
+            using (var profile = new LocalProfile(path))
+            {
+                profile.SetPreferredFormat(true);
+                var cards = LocalDecks.Get("mage").CardIds;
+                cards[0] = PastCard;
+                profile.SaveDeck("Wild together", "HERO_08", cards);
+                long id = profile.CustomDeck.Id;
+                Check(profile.PrefersWild, "the picked Wild format is remembered");
+                Check(profile.IsDeckComplete(id), "a Wild deck with a Past card is complete");
+            }
+            using (var profile = new LocalProfile(path))
+            {
+                Check(profile.PrefersWild, "the Wild format survives a relaunch");
+                var deck = profile.CustomDeck;
+                Check(deck != null, "the Wild deck survives a relaunch");
+                Check(profile.IsDeckComplete(deck.Id), "the reloaded Wild deck is still complete");
+                var owned = NativeUIProjection.StartOwned(profile, deck.Cards);
+                Check(owned.TryGetValue(PastCard, out int past) && past >= LocalEconomy.MaximumPlayset,
+                    "the reloaded Wild deck still owns its Past card at start");
+            }
+        }
+        finally { Directory.Delete(root, true); }
+    }
+
     internal static void Run()
     {
         WildStart_PastCardDeckIsComplete();
@@ -137,5 +169,6 @@ internal static class WildStartChecks
         WildStart_EditorOwnsOnlyWildCards();
         WildStart_SavedDeckReloadsAndStarts();
         WildStart_CollectionShowsAdmittedCards();
+        WildStart_FormatAndDeckSurviveTogether();
     }
 }
