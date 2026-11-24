@@ -136,10 +136,13 @@ internal static class NativeUIProjection
         active && LocalCoreProgression.IsAvailable(cardId);
 
     // This bypasses unavailable native event timing; collection ownership is checked separately.
+    // Wild-admitted cards are playable in the native editor even though they are never owned: the Wild
+    // channel grants them at deck start (LocalProfile.WildDeckOwnedCount / NativeUIProjection.StartOwned).
     private static readonly Lazy<HashSet<string>> testStandardIds = new Lazy<HashSet<string>>(() =>
         new HashSet<string>(LocalDecks.TestStandardCardIds, StringComparer.Ordinal));
     internal static bool ForcesTestPlayability(bool active, string cardId) =>
-        active && cardId != null && (testStandardIds.Value.Contains(cardId) || LocalDecks.IsLegalDeckbuildingCard(cardId));
+        active && cardId != null && (testStandardIds.Value.Contains(cardId) || LocalDecks.IsLegalDeckbuildingCard(cardId)
+            || LocalProfile.IsWildAdmittedCard(cardId));
 
     // A deck's hero card goes through the same event check when its deck box is opened or picked. The client ties
     // Illidan (HERO_10) to the "bt_gameplay" event, which is never active offline, so Demon Hunter decks showed
@@ -241,6 +244,7 @@ internal static class NativeUIProjection
         , StringComparer.Ordinal);
     private static readonly Dictionary<string, SabberStoneCore.Model.Card> PreviewCards = LocalDecks.CustomCards
         .Concat(LocalDecks.TestStandardCardIds.Select(SabberStoneCore.Model.Cards.FromId))
+        .Concat(LocalProfile.IsWildAdmittedCardIds().Select(SabberStoneCore.Model.Cards.FromId).Where(card => card != null))
 #if ENGINE_SOURCE
         .Concat(SabberStoneCore.CardSets.Client.StandardSets.CollectibleIds.Select(SabberStoneCore.Model.Cards.FromId)
             .Where(card => card.Type == SabberStoneCore.Enums.CardType.LOCATION
