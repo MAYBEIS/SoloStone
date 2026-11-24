@@ -204,6 +204,40 @@ internal static class WildStartChecks
         Check(rejected, "a Wild deck still rejects an Inactive card");
     }
 
+    // The picker and the boot projection both validate a personal deck through ValidateCustomSelection.
+    // Passing the ledger totals there rejects a Wild deck (Past cards have a real count of 0), so the
+    // start path must use StartOwned. This pins that choice: the same deck passes with StartOwned and
+    // fails with TotalOwned.
+    internal static void WildStart_StartValidationOwnsWildCards()
+    {
+        string root = Path.Combine(Path.GetTempPath(), "hs-wildstart-" + Guid.NewGuid());
+        Directory.CreateDirectory(root);
+        try
+        {
+            string path = Path.Combine(root, "wild.xml");
+            using (var profile = new LocalProfile(path))
+            {
+                var cards = LocalDecks.Get("mage").CardIds;
+                cards[0] = PastCard;
+                profile.SaveDeck("Wild validation", "HERO_08", cards);
+                var deck = profile.CustomDeck;
+                Check(deck != null, "premise: the Wild deck saved");
+                var ids = deck.Cards.ToArray();
+                NativeUIProjection.ValidateCustomSelection(deck.Id, deck.Hero, ids, deck.Hero, ids,
+                    NativeUIProjection.StartOwned(profile, ids));
+                bool rejected = false;
+                try
+                {
+                    NativeUIProjection.ValidateCustomSelection(deck.Id, deck.Hero, ids, deck.Hero, ids,
+                        NativeUIProjection.TotalOwned(profile));
+                }
+                catch (InvalidOperationException) { rejected = true; }
+                Check(rejected, "the ledger totals alone must reject a Wild deck, so the start path needs StartOwned");
+            }
+        }
+        finally { Directory.Delete(root, true); }
+    }
+
     internal static void Run()
     {
         WildStart_PastCardDeckIsComplete();
@@ -215,5 +249,6 @@ internal static class WildStartChecks
         WildStart_FormatAndDeckSurviveTogether();
         WildStart_StandardChannelStaysClosed();
         WildStart_InactiveStaysOutOfWild();
+        WildStart_StartValidationOwnsWildCards();
     }
 }
