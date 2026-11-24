@@ -592,7 +592,12 @@ internal static partial class NativeUIProbe
             && actual.RandomHeroUseFavorite == expected.RandomHeroUseFavorite && actual.SeasonId == expected.SeasonId
             && actual.BrawlLibraryItemId == expected.BrawlLibraryItemId && actual.NeedsName == expected.NeedsName
             && actual.SortOrder == expected.SortOrder && actual.Rune1 == expected.Rune1 && actual.Rune2 == expected.Rune2
-            && actual.Rune3 == expected.Rune3 && actual.FormatType == expected.FormatType && actual.Locked == expected.Locked
+            && actual.Rune3 == expected.Rune3 && actual.Locked == expected.Locked
+            // The header format follows the picker, not the deck: headers are projected at startup before
+            // Options.SetFormatType runs, so a Wild picker leaves FT_STANDARD headers behind. Both values are
+            // legal envelopes (SupportedNativeEnvelope accepts either), so the format must not decide exactness.
+            && (actual.FormatType == FormatType.FT_STANDARD || actual.FormatType == FormatType.FT_WILD)
+            && (expected.FormatType == FormatType.FT_STANDARD || expected.FormatType == FormatType.FT_WILD)
             && actual.SourceType == expected.SourceType && actual.Pet == expected.Pet && actual.PetVariant == expected.PetVariant
             && actual.RandomPetUseFavorite == expected.RandomPetUseFavorite;
     }
