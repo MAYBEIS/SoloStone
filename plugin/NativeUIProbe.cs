@@ -1388,7 +1388,8 @@ internal static partial class NativeUIProbe
             if (SideboardSignature(custom.Sideboards) != SideboardSignature(ReadSideboards(native)))
                 throw new InvalidOperationException("Native sideboard differs from saved selections.");
             NativeUIProjection.ValidateDraftProjection(native.ID, custom.Name, custom.Hero, custom.Cards.ToArray(),
-                native.Name, NativeBaseHero(native), ids, NativeUIProjection.TotalOwned(Profile));
+                // Wild-admitted cards are owned by the Wild channel at deck start, not by the ledger (LocalProfile.WildDeckOwnedCount).
+                native.Name, NativeBaseHero(native), ids, NativeUIProjection.StartOwned(Profile, custom.Cards));
         }
         if (native.Name != (custom?.Name ?? "Loaner: " + local.Name) || NativeBaseHero(native) != local.Hero
             || !ids.OrderBy(id => id).SequenceEqual(local.CardIds.OrderBy(id => id)))
