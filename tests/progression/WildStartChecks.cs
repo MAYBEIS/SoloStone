@@ -161,6 +161,28 @@ internal static class WildStartChecks
         finally { Directory.Delete(root, true); }
     }
 
+    // The Wild channel must not leak into Standard: with wild=false a Past card is still rejected.
+    private static void WildStart_StandardChannelStaysClosed()
+    {
+        string root = Path.Combine(Path.GetTempPath(), "hs-wildstart-" + Guid.NewGuid());
+        Directory.CreateDirectory(root);
+        try
+        {
+            using (var profile = new LocalProfile(Path.Combine(root, "standard.xml")))
+            {
+                var cards = LocalDecks.Get("mage").CardIds;
+                cards[0] = PastCard;
+                bool rejected = false;
+                try { LocalShop.ValidateDeck("Standard gate", "HERO_08", cards, null, true); }
+                catch (InvalidOperationException) { rejected = true; }
+                Check(rejected, "a Standard deck still rejects a Past card");
+                Check(!profile.IsDeckComplete(profile.CustomDeck == null ? 0 : profile.CustomDeck.Id),
+                    "a Standard profile owns no Wild deck");
+            }
+        }
+        finally { Directory.Delete(root, true); }
+    }
+
     internal static void Run()
     {
         WildStart_PastCardDeckIsComplete();
@@ -170,5 +192,6 @@ internal static class WildStartChecks
         WildStart_SavedDeckReloadsAndStarts();
         WildStart_CollectionShowsAdmittedCards();
         WildStart_FormatAndDeckSurviveTogether();
+        WildStart_StandardChannelStaysClosed();
     }
 }
