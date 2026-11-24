@@ -82,13 +82,22 @@ internal static class NativeFormatLock
     private static void StandardMode(ref VisualsFormatType __0)
     {
         if (!NativeUIProbe.IsolatedLaunch) return;
-        // Standard, Wild and Casual are playable; Classic and Twist are not, so they land on Standard.
-        if (__0 != VisualsFormatType.VFT_STANDARD && __0 != VisualsFormatType.VFT_WILD && __0 != VisualsFormatType.VFT_CASUAL)
+        // Name the mode instead of naming enum members: the picker's allowed set lives in IsDisabledFormatMode,
+        // and the client's VisualsFormatType members are not all pinned by the binding tests.
+        if (NativeUIProjection.IsDisabledFormatMode(ModeName(__0)))
         {
             log?.LogInfo("NATIVE_FORMAT mode " + __0 + " kept VFT_STANDARD");
             __0 = VisualsFormatType.VFT_STANDARD;
         }
         NativeUIProjection.PickerSwitchActive = PlayScreen;
+    }
+
+    // Strip the "VFT_" prefix off the enum's name (standard/wild/casual), so the picker's allowed set has one
+    // source (NativeUIProjection.IsDisabledFormatMode).
+    private static string ModeName(VisualsFormatType mode)
+    {
+        string name = mode.ToString();
+        return name.StartsWith("VFT_", StringComparison.Ordinal) ? name.Substring(4) : name;
     }
 
     private static bool PlayScreen => SceneMgr.IsInitialized() && SceneMgr.Get().GetMode() == SceneMgr.Mode.TOURNAMENT;
@@ -106,8 +115,9 @@ internal static class NativeFormatLock
     // The picker's two axes are independent: Wild/Standard is the deck format, Ranked/Casual is the play mode.
     private static void Keep(VisualsFormatType mode)
     {
-        bool casual = mode == VisualsFormatType.VFT_CASUAL;
-        bool wild = mode == VisualsFormatType.VFT_WILD;
+        string name = ModeName(mode);
+        bool casual = name == "CASUAL";
+        bool wild = name == "WILD";
         if (NativeUIProjection.CasualPlayMode != casual) NativeUIProjection.CasualPlayMode = casual;
         try
         {
