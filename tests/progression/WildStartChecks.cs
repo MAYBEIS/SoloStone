@@ -71,11 +71,50 @@ internal static class WildStartChecks
         Check(!NativeUIProjection.WildOwnsCard(null), "the editor must not own a null card id");
     }
 
+    // A saved Wild deck survives a reload and starts with its Past cards owned.
+    internal static void WildStart_SavedDeckReloadsAndStarts()
+    {
+        string root = Path.Combine(Path.GetTempPath(), "hs-wildstart-" + Guid.NewGuid());
+        Directory.CreateDirectory(root);
+        try
+        {
+            string path = Path.Combine(root, "reload.xml");
+            long id;
+            using (var profile = new LocalProfile(path))
+            {
+                var cards = LocalDecks.Get("mage").CardIds;
+                cards[0] = PastCard;
+                cards[1] = "EX1_008";
+                profile.SaveDeck("Wild reload", "HERO_08", cards);
+                id = profile.CustomDeck.Id;
+                Check(profile.IsDeckComplete(id), "a saved Wild deck must be complete before reload");
+            }
+            using (var reloaded = new LocalProfile(path))
+            {
+                var deck = reloaded.GetDraft(id);
+                Check(deck != null, "a saved Wild deck must reload");
+                Check(deck.Cards.Count == 30, "the reloaded Wild deck keeps its cards");
+                Check(reloaded.IsDeckComplete(id), "a reloaded Wild deck must stay complete");
+                var owned = NativeUIProjection.StartOwned(reloaded, deck.Cards);
+                Check(owned.TryGetValue(PastCard, out int past) && past >= LocalEconomy.MaximumPlayset,
+                    "a reloaded Wild deck owns its Past card at start");
+                Check(owned.TryGetValue("EX1_008", out int second) && second >= LocalEconomy.MaximumPlayset,
+                    "a reloaded Wild deck owns every admitted card at start");
+                var engineCards = deck.Cards.Select(card => SabberStoneCore.Model.Cards.FromId(card))
+                    .Where(card => card != null).ToList();
+                Check(SabberStoneCore.Model.OfflinePoolPolicy.Load().RequiresWildPool(engineCards),
+                    "a Wild deck must derive the Wild random pool");
+            }
+        }
+        finally { Directory.Delete(root, true); }
+    }
+
     internal static void Run()
     {
         WildStart_PastCardDeckIsComplete();
         WildStart_StandardDeckStillNeedsOwnership();
         WildStart_StartOwnedRaisesOnlyWildCards();
         WildStart_EditorOwnsOnlyWildCards();
+        WildStart_SavedDeckReloadsAndStarts();
     }
 }
