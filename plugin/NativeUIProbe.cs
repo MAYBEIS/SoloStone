@@ -1448,7 +1448,8 @@ internal static partial class NativeUIProbe
             }
             if (custom != null)
                 NativeUIProjection.ValidateCustomSelection(native.ID, custom.Hero, custom.Cards.ToArray(),
-                    NativeBaseHero(native), native.GetCardsWithCardID().ToArray(), NativeUIProjection.TotalOwned(Profile));
+                    // Wild-admitted cards are owned by the Wild channel at deck start, not by the ledger (LocalProfile.WildDeckOwnedCount).
+                    NativeBaseHero(native), native.GetCardsWithCardID().ToArray(), NativeUIProjection.StartOwned(Profile, custom.Cards));
             lastSelectedId = native.ID;
             bool casual = NativeUIProjection.CasualPlayMode;
             log.LogInfo((rematch ? "NATIVE_PICKER_REMATCH " : "NATIVE_PICKER_START ") + selected + (casual ? " mode=Casual" : ""));
