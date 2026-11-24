@@ -36,6 +36,15 @@ public sealed partial class LocalProfile
     public double CasualRating => data.CasualRating ?? CasualRules.Seed(EffectiveLadder(data).Rating);
 
     public bool PrefersCasual => CasualRules.IsCasual(data.PlayMode);
+    public bool PrefersWild => WildRules.IsWild(data.DeckFormat);
+    // Remembers the native picker's deck format for the next launch; a no-op when unchanged (no commit per picker open).
+    public void SetPreferredFormat(bool wild)
+    {
+        if (wild == PrefersWild) return;
+        var next = Snapshot();
+        next.DeckFormat = wild ? WildRules.Mode : null;
+        Commit(next);
+    }
     // Remembers the native picker's mode for the next launch; a no-op when unchanged (no commit per picker open).
     public void SetPreferredPlayMode(bool casual)
     {
@@ -62,6 +71,7 @@ public sealed partial class LocalProfile
         if (profile.CasualRating.HasValue && !CasualRules.ValidRating(profile.CasualRating.Value))
             throw new InvalidOperationException("Invalid Casual rating.");
         if (profile.PlayMode != null && !CasualRules.IsCasual(profile.PlayMode)) throw new InvalidOperationException("Unknown play mode.");
+        if (profile.DeckFormat != null && !WildRules.IsWild(profile.DeckFormat)) throw new InvalidOperationException("Unknown deck format.");
         double? last = null;
         foreach (var match in profile.Matches.Concat(profile.Pending == null ? Enumerable.Empty<LocalMatchRecord>() : new[] { profile.Pending }))
         {

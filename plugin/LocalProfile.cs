@@ -274,6 +274,10 @@ public sealed class LocalProfileData
     [XmlIgnore] public bool CasualRatingSpecified { get => CasualRating.HasValue; set { } }
     // Last play mode picked in the native format picker: "Casual", or absent for Standard ranked.
     public string PlayMode;
+    // Deck format picked in the native format picker: "Wild", or absent for Standard. Separate from PlayMode:
+    // Wild is a deck format, not a match mode.
+    public string DeckFormat;
+    public bool ShouldSerializeDeckFormat() => DeckFormat != null;
     public LocalAchievementState Achievements = new LocalAchievementState();
     public string PendingNonMatchAchievementNoticeId;
     public List<string> PendingAchievementToastMatchIds = new List<string>();
@@ -1844,7 +1848,7 @@ public sealed partial class LocalProfile : IDisposable
         PackCounters = data.PackCounters.Select(Copy).ToList(),
         DustBalance = data.DustBalance, CraftSequence = data.CraftSequence, LastCraft = Copy(data.LastCraft),
         LadderState = Copy(data.LadderState), LadderRuleVersion = data.LadderRuleVersion,
-        CasualRating = data.CasualRating, PlayMode = data.PlayMode,
+        CasualRating = data.CasualRating, PlayMode = data.PlayMode, DeckFormat = data.DeckFormat,
         LadderCalibration = data.LadderCalibration == null ? null : new LocalLadderCalibration {
             Version = data.LadderCalibration.Version, MatchCount = data.LadderCalibration.MatchCount
         },

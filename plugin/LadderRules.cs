@@ -241,3 +241,11 @@ public static class CasualRules
     }
     private static double Clamp(double rating) => Math.Max(MinRating, Math.Min(MaxRating, rating));
 }
+
+// The deck format picked in the native format picker. Wild is a deck format, never a match mode: a "Wild"
+// LocalProfileData.PlayMode stays an unknown match mode (CasualRules).
+public static class WildRules
+{
+    public const string Mode = "Wild";
+    public static bool IsWild(string format) => format == Mode;
+}
