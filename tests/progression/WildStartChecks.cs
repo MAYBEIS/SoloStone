@@ -63,10 +63,19 @@ internal static class WildStartChecks
         finally { Directory.Delete(root, true); }
     }
 
+    // The editor's ownership gate answers for Wild-admitted cards only; Standard cards keep native ownership.
+    internal static void WildStart_EditorOwnsOnlyWildCards()
+    {
+        Check(NativeUIProjection.WildOwnsCard(PastCard), "the editor must own a Wild-admitted card");
+        Check(!NativeUIProjection.WildOwnsCard("EX1_287"), "the editor must not own an unowned Standard card");
+        Check(!NativeUIProjection.WildOwnsCard(null), "the editor must not own a null card id");
+    }
+
     internal static void Run()
     {
         WildStart_PastCardDeckIsComplete();
         WildStart_StandardDeckStillNeedsOwnership();
         WildStart_StartOwnedRaisesOnlyWildCards();
+        WildStart_EditorOwnsOnlyWildCards();
     }
 }
