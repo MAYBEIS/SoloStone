@@ -99,20 +99,29 @@ internal static class NativeFormatLock
     private static Exception StandardModeDone(Exception __exception, VisualsFormatType __0)
     {
         NativeUIProjection.PickerSwitchActive = false;
-        if (__exception == null && NativeUIProbe.IsolatedLaunch && PlayScreen) Keep(__0 == VisualsFormatType.VFT_CASUAL);
+        if (__exception == null && NativeUIProbe.IsolatedLaunch && PlayScreen) Keep(__0);
         return __exception;
     }
 
-    private static void Keep(bool casual)
+    // The picker's two axes are independent: Wild/Standard is the deck format, Ranked/Casual is the play mode.
+    private static void Keep(VisualsFormatType mode)
     {
+        bool casual = mode == VisualsFormatType.VFT_CASUAL;
+        bool wild = mode == VisualsFormatType.VFT_WILD;
         if (NativeUIProjection.CasualPlayMode != casual) NativeUIProjection.CasualPlayMode = casual;
         try
         {
             var profile = LocalLadder.Profile;
-            if (profile != null && profile.PrefersCasual != casual)
+            if (profile == null) return;
+            if (profile.PrefersCasual != casual)
             {
                 profile.SetPreferredPlayMode(casual);
                 log?.LogInfo("NATIVE_FORMAT mode " + (casual ? "Casual" : "Standard") + " remembered");
+            }
+            if (profile.PrefersWild != wild)
+            {
+                profile.SetPreferredFormat(wild);
+                log?.LogInfo("NATIVE_FORMAT format " + (wild ? "Wild" : "Standard") + " remembered");
             }
         }
         catch (Exception error) { log?.LogWarning("NATIVE_FORMAT mode not remembered: " + error.Message); }

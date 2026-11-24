@@ -558,7 +558,9 @@ internal static partial class NativeUIProbe
         SaveLocal(new GameSaveDataManager.SubkeySaveRequest(GameSaveKeyId.PLAYER_FLAGS, GameSaveKeySubkeyId.PLAYER_FLAGS_UNLOCKED_WILD, 1L));
         SaveLocal(new GameSaveDataManager.SubkeySaveRequest(GameSaveKeyId.PLAYER_FLAGS, GameSaveKeySubkeyId.PLAYER_FLAGS_HAS_SEEN_MASS_PACK_OPENING_TOOLTIP, Profile.SeenMassPackTooltip ? 1L : 0L));
         SaveLocal(new GameSaveDataManager.SubkeySaveRequest(GameSaveKeyId.PLAYER_FLAGS, GameSaveKeySubkeyId.PLAYER_FLAGS_HAS_COMPLETED_APPRENTICE, 1L));
-        Options.SetFormatType(LocalDeckFormat);
+        // Restore the format the picker last remembered. LocalDeckFormat reads Options.GetFormatType(), so it cannot
+        // seed this value: the profile is the only source at startup.
+        Options.SetFormatType(Profile.PrefersWild ? FormatType.FT_WILD : FormatType.FT_STANDARD);
         NativeUIProjection.CasualPlayMode = Profile.PrefersCasual;
         Options.SetInRankedPlayMode(!NativeUIProjection.CasualPlayMode);
         if (CollectionManager.Get() != null) throw new InvalidOperationException("CollectionManager was initialized before probe");
