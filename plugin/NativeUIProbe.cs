@@ -471,6 +471,10 @@ internal static partial class NativeUIProbe
     private static void Bootstrap()
     {
         State("Projecting"); baselineHash = Hash();
+        // Restore the format the picker last remembered. LocalDeckFormat reads Options.GetFormatType(), so it cannot
+        // seed this value: the profile is the only source at startup.
+        // This must run before PublishMedal and the deck header projection below, which both read LocalDeckFormat.
+        Options.SetFormatType(Profile.PrefersWild ? FormatType.FT_WILD : FormatType.FT_STANDARD);
         // Native Options reads these dimensions; Unity restores the display separately.
         // Test lanes skip it: the options file is shared with the owner's full-screen lane 0 and a windowed lane must not leave its size there.
         if (Array.IndexOf(Environment.GetCommandLineArgs(), "-hs-native-ui-lane") < 0)
@@ -558,9 +562,6 @@ internal static partial class NativeUIProbe
         SaveLocal(new GameSaveDataManager.SubkeySaveRequest(GameSaveKeyId.PLAYER_FLAGS, GameSaveKeySubkeyId.PLAYER_FLAGS_UNLOCKED_WILD, 1L));
         SaveLocal(new GameSaveDataManager.SubkeySaveRequest(GameSaveKeyId.PLAYER_FLAGS, GameSaveKeySubkeyId.PLAYER_FLAGS_HAS_SEEN_MASS_PACK_OPENING_TOOLTIP, Profile.SeenMassPackTooltip ? 1L : 0L));
         SaveLocal(new GameSaveDataManager.SubkeySaveRequest(GameSaveKeyId.PLAYER_FLAGS, GameSaveKeySubkeyId.PLAYER_FLAGS_HAS_COMPLETED_APPRENTICE, 1L));
-        // Restore the format the picker last remembered. LocalDeckFormat reads Options.GetFormatType(), so it cannot
-        // seed this value: the profile is the only source at startup.
-        Options.SetFormatType(Profile.PrefersWild ? FormatType.FT_WILD : FormatType.FT_STANDARD);
         NativeUIProjection.CasualPlayMode = Profile.PrefersCasual;
         Options.SetInRankedPlayMode(!NativeUIProjection.CasualPlayMode);
         if (CollectionManager.Get() != null) throw new InvalidOperationException("CollectionManager was initialized before probe");
