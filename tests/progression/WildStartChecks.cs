@@ -5,6 +5,9 @@ internal static class WildStartChecks
     // AT_004 is a manifest Past card outside the Standard ledger; Wild admits it, Standard does not.
     private const string PastCard = "AT_004";
 
+    // BE_000 is a manifest Inactive member: it belongs to no pool, so the Wild channel must never admit it.
+    private const string InactiveCard = "BE_000";
+
     // A saved Wild deck must be startable: ownership is satisfied by the Wild admission channel, not the ledger.
     internal static void WildStart_PastCardDeckIsComplete()
     {
@@ -183,6 +186,24 @@ internal static class WildStartChecks
         finally { Directory.Delete(root, true); }
     }
 
+    // The Wild pool is Standard plus Past, never Inactive: the 130 Inactive members belong to no pool.
+    internal static void WildStart_InactiveStaysOutOfWild()
+    {
+        var policy = SabberStoneCore.Model.OfflinePoolPolicy.Load();
+        var inactive = policy.Members.Where(member => member.Scope == "Inactive").Select(member => member.CardId).ToList();
+        Check(inactive.Count > 0, "premise: the catalog holds Inactive members");
+        Check(inactive.All(id => !LocalProfile.IsWildAdmittedCard(id)), "no Inactive card is Wild-admitted");
+        Check(!inactive.Contains(PastCard), "premise: the Past fixture is not an Inactive member");
+        Check(LocalProfile.IsWildAdmittedCard(PastCard), "premise: the Past fixture is Wild-admitted");
+        var cards = LocalDecks.Get("mage").CardIds;
+        cards[0] = InactiveCard;
+        bool rejected = false;
+        try { LocalShop.ValidateDeck("Inactive gate", "HERO_08", cards, null, true, false, false, true); }
+        catch (InvalidOperationException) { rejected = true; }
+        catch (ArgumentException) { rejected = true; }
+        Check(rejected, "a Wild deck still rejects an Inactive card");
+    }
+
     internal static void Run()
     {
         WildStart_PastCardDeckIsComplete();
@@ -193,5 +214,6 @@ internal static class WildStartChecks
         WildStart_CollectionShowsAdmittedCards();
         WildStart_FormatAndDeckSurviveTogether();
         WildStart_StandardChannelStaysClosed();
+        WildStart_InactiveStaysOutOfWild();
     }
 }
