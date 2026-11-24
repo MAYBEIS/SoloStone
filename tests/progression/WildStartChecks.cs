@@ -173,7 +173,8 @@ internal static class WildStartChecks
                 var cards = LocalDecks.Get("mage").CardIds;
                 cards[0] = PastCard;
                 bool rejected = false;
-                try { LocalShop.ValidateDeck("Standard gate", "HERO_08", cards, null, true); }
+                // standardOnly: false isolates the Wild admission gate from the separate IsStandardCard condition.
+                try { LocalShop.ValidateDeck("Standard gate", "HERO_08", cards, null, true, false, false); }
                 catch (InvalidOperationException) { rejected = true; }
                 Check(rejected, "a Standard deck still rejects a Past card");
                 Check(profile.CustomDeck == null, "a Standard profile holds no Wild deck");
