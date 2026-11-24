@@ -16,6 +16,8 @@ internal static partial class NativeUIProbe
         InitializeSideboardSubset(harmony);
         Hook(harmony, typeof(DeckRule_CountCopiesOfEachCard), "GetCopiesInDeck", nameof(LocalDeckCopyCount),
             new[] { typeof(string), typeof(CollectionDeck), typeof(bool) });
+        Hook(harmony, typeof(CollectionDeck), "CanCardBeAddedAsOwned", nameof(LocalWildOwnsCard),
+            new[] { typeof(string), typeof(TAG_PREMIUM) });
     }
 
     // Use the same counterpart groups for the native editor and its invalid-deck UI.
@@ -24,6 +26,15 @@ internal static partial class NativeUIProbe
         if (!active || __1 == null || __1.HasSideboardCards || !NativeUIProjection.IsPersonalId(__1.ID)
             || Profile.GetDraft(__1.ID) == null || !LocalDecks.CustomCards.Any(card => card.Id == __0)) return true;
         __result = NativeUIProjection.DeckCopyCount(__1.GetCardsWithCardID(), __0);
+        return false;
+    }
+
+    // Wild decks own their admitted cards at deck start; the native collection still reports zero copies for them.
+    private static bool LocalWildOwnsCard(string __0, TAG_PREMIUM __1, ref bool __result)
+    {
+        if (!active || __1 != TAG_PREMIUM.NORMAL || LocalDeckFormat != FormatType.FT_WILD) return true;
+        if (!NativeUIProjection.WildOwnsCard(__0)) return true;
+        __result = true;
         return false;
     }
 

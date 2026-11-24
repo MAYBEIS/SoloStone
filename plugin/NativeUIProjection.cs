@@ -162,6 +162,10 @@ internal static class NativeUIProjection
     internal static int DeckCopyCount(IEnumerable<string> ids, string cardId) =>
         ids.Count(id => LocalCardCatalog.CopyGroup(id) == LocalCardCatalog.CopyGroup(cardId));
 
+    // Wild decks own their admitted cards at deck start (LocalProfile.WildDeckOwnedCount), so the native editor must
+    // let them into a Wild deck even though CollectionManager reports zero copies. The format gate lives in the caller.
+    internal static bool WildOwnsCard(string cardId) => LocalProfile.IsWildAdmittedCard(cardId);
+
     // Retail caps the native deck tray at 27 decks (DeckTrayDeckListContent 27 slots + 2 spare sections, picker pages
     // are dynamic). SoloStone raises the tray to NativeDeckLimit (NativeDeckLimits transpiles the native literals).
     // CreateTraySections instantiates its TraySection prefab in a loop bounded only by the shifted section literal, and
