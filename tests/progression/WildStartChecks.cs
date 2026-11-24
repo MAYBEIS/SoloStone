@@ -176,8 +176,7 @@ internal static class WildStartChecks
                 try { LocalShop.ValidateDeck("Standard gate", "HERO_08", cards, null, true); }
                 catch (InvalidOperationException) { rejected = true; }
                 Check(rejected, "a Standard deck still rejects a Past card");
-                Check(!profile.IsDeckComplete(profile.CustomDeck == null ? 0 : profile.CustomDeck.Id),
-                    "a Standard profile owns no Wild deck");
+                Check(profile.CustomDeck == null, "a Standard profile holds no Wild deck");
             }
         }
         finally { Directory.Delete(root, true); }
