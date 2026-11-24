@@ -8,14 +8,16 @@ internal static partial class NativeUIProbe
 {
     // The deck format follows the native picker: Wild only when the picker selects Wild, Standard otherwise.
     // Offline the client has no set-rotation timings, so it classes every set Standard; the engine (always FT_WILD
-    // internally) and LocalDecks/LocalCardCatalog keep enforcing the real meta pool. Not persisted: profiles store no format.
+    // internally) and LocalDecks/LocalCardCatalog keep enforcing the real meta pool. The picker's format is persisted as
+    // LocalProfileData.DeckFormat ("Wild", or absent for Standard), so a Wild choice survives a relaunch.
     internal static FormatType LocalDeckFormat =>
         Options.GetFormatType() == FormatType.FT_WILD ? FormatType.FT_WILD : FormatType.FT_STANDARD;
 
     // Live 2026-10-30: offline the client has no server-delivered King of the Underbelly subset (ALLOWED_SIDEBOARD_SUBSET
     // 19499 is empty), so DeckRule_SideboardSubset refused every contraband pick ("invalid cards in your sideboard",
     // empty contraband pool). Where native has no subset data for an owner the engine models, the engine's deckbuilding
-    // rule supplies membership. Ownership stays native (CanCardBeAddedAsOwned is untouched).
+    // rule supplies membership. Ownership stays native except for the Wild channel: NativeDeckEditor.LocalWildOwnsCard
+    // answers CanCardBeAddedAsOwned for Wild-admitted cards while the picker is on Wild, and never fakes an owned count.
     internal static void InitializeSideboardSubset(Harmony harmony)
     {
         foreach (var hook in new[] { ("IsInAllowedSubset", nameof(LocalSideboardSubsetMember)),
