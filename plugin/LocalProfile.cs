@@ -1306,7 +1306,8 @@ public sealed partial class LocalProfile : IDisposable
         var deck = data.CustomDecks.SingleOrDefault(row => row.Id == id);
         if (deck == null) return false;
         try {
-            ValidateDeckOwnership(deck.CardEntries.Concat(deck.Sideboards.SelectMany(board => board.CardEntries)), false);
+            ValidateDeckOwnership(deck.CardEntries.Concat(deck.Sideboards.SelectMany(board => board.CardEntries)), false,
+                deck.Cards.Any(IsWildAdmittedCard));
             return true;
         } catch (InvalidOperationException) { return false; }
     }
