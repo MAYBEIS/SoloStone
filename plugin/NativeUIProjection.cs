@@ -1054,6 +1054,16 @@ internal static class NativeUIProjection
                 owned[id] = Math.Max(owned.TryGetValue(id, out int count) ? count : 0, LocalEconomy.MaximumPlayset);
         return owned;
     }
+    // The picker asks whether a deck is owned through PLAYER_OWNS_EACH_COPY. A Wild deck is owned through
+    // StartOwned (the Wild channel), never through the ledger, so the check takes the owned map as a parameter.
+    internal static bool DeckOwned(IEnumerable<string> ids, IReadOnlyDictionary<string, int> owned)
+    {
+        if (ids == null || owned == null) return false;
+        string[] deckIds = ids.ToArray();
+        var deckOwned = LocalDecks.WithDeckCompanions(owned, deckIds);
+        return deckIds.Length == LocalDecks.DeckSize(deckIds)
+            && deckIds.GroupBy(id => id).All(group => deckOwned.TryGetValue(group.Key, out int count) && count >= group.Count());
+    }
     // Start-time check of a personal deck: ownership here is the native total across versions
     // (per-version ownership is LocalProfile.IsDeckComplete's job, run before this).
     internal static void ValidateCustomStart(LocalProfile profile, long nativeId, LocalCustomDeck saved, LocalDeck resolved) =>

@@ -1188,10 +1188,19 @@ internal static partial class NativeUIProbe
     }
     private static bool LoanerRuleset(CollectionDeck __instance, ref bool __result)
     {
-        if (!active || !__instance.NetworkContentsLoaded()
-            || !NativeUIProjection.IsExactLoaner(__instance.ID, __instance.HeroCardID, __instance.GetCardsWithCardID())) return true;
-        DeckRuleset ruleset = __instance.GetRuleset();
-        __result = ruleset != null && ruleset.IsDeckValid(__instance, DeckRule.RuleType.PLAYER_OWNS_EACH_COPY);
+        if (!active || !__instance.NetworkContentsLoaded()) return true;
+        string[] ids = __instance.GetCardsWithCardID().ToArray();
+        if (NativeUIProjection.IsExactLoaner(__instance.ID, __instance.HeroCardID, ids))
+        {
+            DeckRuleset ruleset = __instance.GetRuleset();
+            __result = ruleset != null && ruleset.IsDeckValid(__instance, DeckRule.RuleType.PLAYER_OWNS_EACH_COPY);
+            return false;
+        }
+        // A personal Wild deck is owned through the Wild channel, not the ledger: Past cards have a real
+        // ownership count of 0, so PLAYER_OWNS_EACH_COPY would lock the deck in the picker.
+        LocalCustomDeck custom = Profile?.GetDraft(__instance.ID);
+        if (custom == null || !custom.Cards.Any(LocalProfile.IsWildAdmittedCard)) return true;
+        __result = NativeUIProjection.DeckOwned(ids, NativeUIProjection.StartOwned(Profile, ids));
         return false;
     }
     private static bool SkipActive() => !active;
