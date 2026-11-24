@@ -238,6 +238,31 @@ internal static class WildStartChecks
         finally { Directory.Delete(root, true); }
     }
 
+    internal static void WildStart_PickerOwnsWildDeck()
+    {
+        string root = Path.Combine(Path.GetTempPath(), "hs-wildstart-" + Guid.NewGuid());
+        Directory.CreateDirectory(root);
+        try
+        {
+            var profile = new LocalProfile(Path.Combine(root, "profile.xml"));
+            var cards = LocalDecks.Get("mage").CardIds;
+            cards[0] = PastCard;
+            profile.SaveDeck("Wild picker", "HERO_08", cards);
+            var deck = profile.CustomDeck;
+            Check(deck != null, "premise: the Wild deck saved");
+            string[] ids = deck.Cards.ToArray();
+            Check(NativeUIProjection.DeckOwned(ids, NativeUIProjection.StartOwned(profile, ids)),
+                "the picker owns a Wild deck through the Wild channel");
+            Check(!NativeUIProjection.DeckOwned(ids, NativeUIProjection.TotalOwned(profile)),
+                "the picker does not own a Wild deck through the ledger");
+            var standard = LocalDecks.Get("mage").CardIds;
+            standard[0] = "EX1_287";
+            Check(!NativeUIProjection.DeckOwned(standard.ToArray(), NativeUIProjection.StartOwned(profile, standard)),
+                "the Wild channel does not own an unowned Standard card");
+        }
+        finally { Directory.Delete(root, true); }
+    }
+
     internal static void Run()
     {
         WildStart_PastCardDeckIsComplete();
@@ -250,5 +275,6 @@ internal static class WildStartChecks
         WildStart_StandardChannelStaysClosed();
         WildStart_InactiveStaysOutOfWild();
         WildStart_StartValidationOwnsWildCards();
+        WildStart_PickerOwnsWildDeck();
     }
 }
