@@ -71,6 +71,26 @@ internal static class WildStartChecks
         Check(!NativeUIProjection.WildOwnsCard(null), "the editor must not own a null card id");
     }
 
+    // The native collection lists every Wild-admitted card without owning it: the pool grants them at deck start.
+    internal static void WildStart_CollectionShowsAdmittedCards()
+    {
+        string root = Path.Combine(Path.GetTempPath(), "hs-wildstart-" + Guid.NewGuid());
+        Directory.CreateDirectory(root);
+        try
+        {
+            using (var profile = new LocalProfile(Path.Combine(root, "collection.xml")))
+            {
+                var past = SabberStoneCore.Model.OfflinePoolPolicy.Load().WildOnlyCardIds;
+                var pool = new HashSet<string>(NativeUIProjection.NativeCollectiblePool(null), StringComparer.Ordinal);
+                Check(past.All(id => pool.Contains(id)), "every Wild-admitted card is in the native collection pool");
+                Check(past.All(id => NativeUIProjection.IsNativeCollectible(id, profile)), "every Wild-admitted card is collectible");
+                Check(profile.TotalOwnedCount(PastCard) == 0, "a Wild-admitted card stays unowned in the collection");
+                Check(NativeUIProjection.IsNativeCollectible(PastCard, profile), "an unowned Wild-admitted card is still listed");
+            }
+        }
+        finally { Directory.Delete(root, true); }
+    }
+
     // A saved Wild deck survives a reload and starts with its Past cards owned.
     internal static void WildStart_SavedDeckReloadsAndStarts()
     {
@@ -116,5 +136,6 @@ internal static class WildStartChecks
         WildStart_StartOwnedRaisesOnlyWildCards();
         WildStart_EditorOwnsOnlyWildCards();
         WildStart_SavedDeckReloadsAndStarts();
+        WildStart_CollectionShowsAdmittedCards();
     }
 }
