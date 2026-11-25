@@ -1444,7 +1444,9 @@ public sealed partial class LocalProfile : IDisposable
     {
         var deck = data.CustomDecks.SingleOrDefault(row => row.Id == id);
         if (deck == null) throw new InvalidOperationException("Saved draft does not exist.");
-        return LocalCrafting.MissingDeckSlots(deck, DeckOwnedCount(data, profileOptions.AllCosmetics));
+        var owned = DeckOwnedCount(data, profileOptions.AllCosmetics);
+        if (deck.Cards.Any(IsWildAdmittedCard)) owned = WildDeckOwnedCount(owned);
+        return LocalCrafting.MissingDeckSlots(deck, owned);
     }
 
     private void ValidateDeckOwnership(IEnumerable<LocalDeckCard> cards, bool normalToo, bool wild = false)

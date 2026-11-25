@@ -125,10 +125,62 @@ internal static class WildStartE2EChecks
         finally { Directory.Delete(root, true); }
     }
 
+    // Import (NativeDeckCodeHooks LastImportMissing) and diagnostics (NativeTestControl deckOwnership.missing) read
+    // MissingDeckSlotCount, so that count must use the same Wild channel as the start check: a Wild deck's Past card
+    // costs no slot, while an unowned Standard card is still charged.
+    internal static void WildStartE2E_MissingSlotCountUsesWildChannel()
+    {
+        string root = Path.Combine(Path.GetTempPath(), "hs-wildstart-e2e-" + Guid.NewGuid());
+        Directory.CreateDirectory(root);
+        try
+        {
+            string path = Path.Combine(root, "wild-slots.xml");
+            using (var profile = new LocalProfile(path))
+            {
+                profile.SaveDeck("Wild slots", "HERO_08", WildCards());
+                var saved = profile.CustomDeck;
+                Check(saved != null, "premise: the Wild deck saved");
+                Check(saved.Cards.Contains(PastCard), "premise: the Wild deck carries the Past card");
+                // Premise: the plain ledger does charge the Past card, so the Wild channel is what frees the deck.
+                Check(LocalCrafting.MissingDeckSlots(saved, profile.OwnedCount) > 0,
+                    "premise: the plain ledger charges the Past card");
+                Check(profile.MissingDeckSlotCount(saved.Id) == 0,
+                    "a Wild deck must cost no slot for its Past card");
+            }
+        }
+        finally { Directory.Delete(root, true); }
+    }
+
+    // The Wild channel must not mask a real gap: an unowned Standard card keeps costing its slot, exactly as the
+    // plain ledger charges it, so Standard imports and diagnostics stay truthful.
+    internal static void WildStartE2E_MissingSlotCountStandardGapStays()
+    {
+        string root = Path.Combine(Path.GetTempPath(), "hs-wildstart-e2e-" + Guid.NewGuid());
+        Directory.CreateDirectory(root);
+        try
+        {
+            string path = Path.Combine(root, "standard-slots.xml");
+            using (var profile = new LocalProfile(path))
+            {
+                profile.SaveDeck("Standard slots", "HERO_08", StandardCards());
+                var saved = profile.CustomDeck;
+                Check(saved != null, "premise: the Standard deck saved");
+                Check(saved.Cards.Contains(UnownedStandardCard), "premise: the Standard deck carries the unowned card");
+                int plain = LocalCrafting.MissingDeckSlots(saved, profile.OwnedCount);
+                Check(plain > 0, "premise: the plain ledger charges the unowned Standard card");
+                Check(profile.MissingDeckSlotCount(saved.Id) == plain,
+                    "the Wild channel must not mask an unowned Standard card");
+            }
+        }
+        finally { Directory.Delete(root, true); }
+    }
+
     internal static void Run()
     {
         WildStartE2E_PastCardDeckStarts();
         WildStartE2E_StandardDeckStillRefused();
         WildStartE2E_WildGateOwnsPastCardsOnly();
+        WildStartE2E_MissingSlotCountUsesWildChannel();
+        WildStartE2E_MissingSlotCountStandardGapStays();
     }
 }
