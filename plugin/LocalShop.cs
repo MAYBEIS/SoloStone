@@ -592,6 +592,10 @@ public sealed class LocalShop
             || cards.Any(id => (standardOnly && !IsStandardCard(Cards.FromId(id))) || !LocalDecks.IsAllowedInDeck(Cards.FromId(id), LocalDecks.HeroClass(hero))))
             throw new InvalidOperationException((standardOnly ? "Invalid Standard recipe deck: " : "Invalid local deck: ") + name);
         LocalDecks.ValidateRunes(cards.Select(Cards.FromId), LocalDecks.HeroClass(hero));
+        if (!wild)
+            foreach (string id in (sideboards ?? Enumerable.Empty<LocalSideboard>()).Where(row => row != null && row.Cards != null).SelectMany(row => row.Cards))
+                if (LocalProfile.IsWildAdmittedCard(id))
+                    throw new InvalidOperationException("Sideboard card is outside the Wild channel: " + name);
         new LocalDeck(name, hero, cards).WithSideboards(sideboards, complete);
     }
     private void Validate() {
