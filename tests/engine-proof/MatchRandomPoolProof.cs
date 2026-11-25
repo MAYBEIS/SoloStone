@@ -141,11 +141,27 @@ internal static class MatchRandomPoolProof
         var wild = Cards.RandomPool(NewGame(format: GenerationFormat.Wild), PoolDestination.Hand);
         Check(!wild.Legacy, "Wild policy is not legacy");
         Check(wild.Format == GenerationFormat.Wild && standard.Format == GenerationFormat.Standard, "formats are keyed");
-        Check(standard.All.Select(c => c.Id).SequenceEqual(wild.All.Select(c => c.Id)), "Wild equals Standard until a Wild list exists");
+        // Wild is Standard plus the manifest's Past list, the same membership OfflineCardPools.Candidates
+        // gives PoolScope.Wild. Inactive members (the next meta's cards) are in neither list.
+        var manifest = NewGame().OfflinePools;
         var standardIds = standard.All.Select(c => c.Id).ToHashSet();
+        var pastIds = manifest.Past.Select(m => m.CardId).ToHashSet();
+        var wildIds = wild.All.Select(c => c.Id).ToHashSet();
+        // The two load-bearing checks: :152 catches WildExtra reading AllWild, :153 catches it going back to
+        // empty. The rest document the shape and are implied by them once :152 holds.
+        Check(wildIds.IsSubsetOf(standardIds.Concat(pastIds).ToHashSet()), "Wild adds only manifest Past members");
+        Check(wildIds.Count > standardIds.Count, "premise: the Past list adds cards to Wild");
+        Check(standardIds.IsSubsetOf(wildIds), "documentation: Wild keeps every Standard card");
+        var inactiveIds = OfflinePoolPolicy.Load().Members.Where(m => m.Scope == "Inactive").Select(m => m.CardId).ToHashSet();
+        Check(inactiveIds.Count > 0, "premise: the catalog holds Inactive members");
+        Check(!wildIds.Overlaps(inactiveIds), "documentation: Wild never adds Inactive members");
         var legacyOnly = Cards.AllWild.Where(c => !standardIds.Contains(c.Id)).Select(c => c.Id).ToHashSet();
         Check(legacyOnly.Count > 500, "premise: AllWild holds many non-Standard cards");
-        Check(!wild.All.Any(c => legacyOnly.Contains(c.Id)), "Wild policy never reads AllWild");
+        // The manifest's Past members also sit in the frozen AllWild list, so Wild legitimately holds some of
+        // them. What Wild must never take is the REST of AllWild: stub cards from unimplemented sets.
+        var allWildOnly = legacyOnly.Where(id => !pastIds.Contains(id)).ToHashSet();
+        Check(allWildOnly.Count > 0, "premise: AllWild holds cards outside both Standard and the manifest Past list");
+        Check(!wildIds.Overlaps(allWildOnly), "Wild policy never reads AllWild beyond the manifest Past list");
         // FormatType is not the key: FT_STANDARD and FT_WILD games with the same policy share one pool.
         Check(ReferenceEquals(standard, Cards.RandomPool(NewGame(formatType: FormatType.FT_STANDARD), PoolDestination.Hand)),
             "FormatType does not select the pool");

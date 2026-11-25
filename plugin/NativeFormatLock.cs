@@ -8,14 +8,14 @@ using Hearthstone.UI;
 using PegasusShared;
 using UnityEngine;
 
-// SoloStone plays Standard ranked and Standard Casual (#37; NativeUIProbe.LocalDeckFormat). The deck picker's format toggle
-// opens the native picker, where Standard and Casual are selectable: Wild (and Classic/Twist if a layout shows them)
+// SoloStone plays Standard, Wild and Casual (#37; NativeUIProbe.LocalDeckFormat). The deck picker's format toggle
+// opens the native picker, where Standard, Wild and Casual are selectable: Classic and Twist (if a layout shows them)
 // stay visible, greyed and click-dead, with a "Coming later" note on hover. Greyed the native way: Clickable.Active = false
 // plays the button's own authored "inactive" state and stops its click states (as the client disables a widget button);
 // the hover listener stays live, and the art is desaturated and dimmed through property blocks that survive state swaps.
 // Every other way into another mode is coerced:
 // Options.SetFormatType (hero picker, set filter, tutorials) and DeckPickerTrayDisplay.SwitchFormatTypeAndRankedPlayMode
-// (picker events, adventure/set-rotation flows) land on Standard or Casual; the choice is kept in
+// (picker events, adventure/set-rotation flows) land on Standard, Wild or Casual; the choice is kept in
 // NativeUIProjection.CasualPlayMode (IN_RANKED_PLAY_MODE reads its inverse) and remembered per save.
 // Update runs every frame inside the probe's Update: it never throws; a failure logs once and disables the visual lock
 // (the coercions above still keep the client Standard).
@@ -72,7 +72,9 @@ internal static class NativeFormatLock
 
     private static void StandardFormat(ref FormatType __0)
     {
-        if (!NativeUIProbe.IsolatedLaunch || __0 == FormatType.FT_UNKNOWN || __0 == NativeUIProbe.LocalDeckFormat) return;
+        if (!NativeUIProbe.IsolatedLaunch || __0 == FormatType.FT_UNKNOWN) return;
+        // Standard and Wild are both playable; Classic and Twist are not, so they land on the current format.
+        if (__0 == FormatType.FT_STANDARD || __0 == FormatType.FT_WILD) return;
         log?.LogInfo("NATIVE_FORMAT options " + __0 + " kept " + NativeUIProbe.LocalDeckFormat);
         __0 = NativeUIProbe.LocalDeckFormat;
     }
@@ -80,12 +82,22 @@ internal static class NativeFormatLock
     private static void StandardMode(ref VisualsFormatType __0)
     {
         if (!NativeUIProbe.IsolatedLaunch) return;
-        if (__0 != VisualsFormatType.VFT_STANDARD && __0 != VisualsFormatType.VFT_CASUAL)
+        // Name the mode instead of naming enum members: the picker's allowed set lives in IsDisabledFormatMode,
+        // and the client's VisualsFormatType members are not all pinned by the binding tests.
+        if (NativeUIProjection.IsDisabledFormatMode(ModeName(__0)))
         {
             log?.LogInfo("NATIVE_FORMAT mode " + __0 + " kept VFT_STANDARD");
             __0 = VisualsFormatType.VFT_STANDARD;
         }
         NativeUIProjection.PickerSwitchActive = PlayScreen;
+    }
+
+    // Strip the "VFT_" prefix off the enum's name (standard/wild/casual), so the picker's allowed set has one
+    // source (NativeUIProjection.IsDisabledFormatMode).
+    private static string ModeName(VisualsFormatType mode)
+    {
+        string name = mode.ToString();
+        return name.StartsWith("VFT_", StringComparison.Ordinal) ? name.Substring(4) : name;
     }
 
     private static bool PlayScreen => SceneMgr.IsInitialized() && SceneMgr.Get().GetMode() == SceneMgr.Mode.TOURNAMENT;
@@ -96,20 +108,30 @@ internal static class NativeFormatLock
     private static Exception StandardModeDone(Exception __exception, VisualsFormatType __0)
     {
         NativeUIProjection.PickerSwitchActive = false;
-        if (__exception == null && NativeUIProbe.IsolatedLaunch && PlayScreen) Keep(__0 == VisualsFormatType.VFT_CASUAL);
+        if (__exception == null && NativeUIProbe.IsolatedLaunch && PlayScreen) Keep(__0);
         return __exception;
     }
 
-    private static void Keep(bool casual)
+    // The picker's two axes are independent: Wild/Standard is the deck format, Ranked/Casual is the play mode.
+    private static void Keep(VisualsFormatType mode)
     {
+        string name = ModeName(mode);
+        bool casual = name == "CASUAL";
+        bool wild = name == "WILD";
         if (NativeUIProjection.CasualPlayMode != casual) NativeUIProjection.CasualPlayMode = casual;
         try
         {
             var profile = LocalLadder.Profile;
-            if (profile != null && profile.PrefersCasual != casual)
+            if (profile == null) return;
+            if (profile.PrefersCasual != casual)
             {
                 profile.SetPreferredPlayMode(casual);
                 log?.LogInfo("NATIVE_FORMAT mode " + (casual ? "Casual" : "Standard") + " remembered");
+            }
+            if (profile.PrefersWild != wild)
+            {
+                profile.SetPreferredFormat(wild);
+                log?.LogInfo("NATIVE_FORMAT format " + (wild ? "Wild" : "Standard") + " remembered");
             }
         }
         catch (Exception error) { log?.LogWarning("NATIVE_FORMAT mode not remembered: " + error.Message); }

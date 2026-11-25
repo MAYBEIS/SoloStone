@@ -471,6 +471,10 @@ internal static partial class NativeUIProbe
     private static void Bootstrap()
     {
         State("Projecting"); baselineHash = Hash();
+        // Restore the format the picker last remembered. LocalDeckFormat reads Options.GetFormatType(), so it cannot
+        // seed this value: the profile is the only source at startup.
+        // This must run before PublishMedal and the deck header projection below, which both read LocalDeckFormat.
+        Options.SetFormatType(Profile.PrefersWild ? FormatType.FT_WILD : FormatType.FT_STANDARD);
         // Native Options reads these dimensions; Unity restores the display separately.
         // Test lanes skip it: the options file is shared with the owner's full-screen lane 0 and a windowed lane must not leave its size there.
         if (Array.IndexOf(Environment.GetCommandLineArgs(), "-hs-native-ui-lane") < 0)
@@ -515,8 +519,8 @@ internal static partial class NativeUIProbe
             // Retail inferred 2 (medium confidence, docs/design/pet-xp.md). NativeMatch answers packets 68/67 and enforces the cap.
             MaxPetTreatsAllowedPerGame = NativeMatch.MaxPetTreatsPerGame
         };
-        // Standard ranked and Standard Casual are playable (GameUtils.IsFormatPlayable); Wild stays visible but disabled.
-        features.Games.Tournament = true; features.Games.Casual = true; features.Games.RankedStandard = true; features.Games.RankedWild = false;
+        // Standard, Wild and Casual are playable (GameUtils.IsFormatPlayable); Classic and Twist stay visible but disabled.
+        features.Games.Tournament = true; features.Games.Casual = true; features.Games.RankedStandard = true; features.Games.RankedWild = true;
         features.Collection.Manager = true; features.Collection.Crafting = CraftingLedgerRegistry.Current != null;
         // Upgrades consume Normal copies through the same atomic crafting ledger.
         features.EnableUpgradeToGolden = CraftingLedgerRegistry.Current != null;
@@ -558,7 +562,6 @@ internal static partial class NativeUIProbe
         SaveLocal(new GameSaveDataManager.SubkeySaveRequest(GameSaveKeyId.PLAYER_FLAGS, GameSaveKeySubkeyId.PLAYER_FLAGS_UNLOCKED_WILD, 1L));
         SaveLocal(new GameSaveDataManager.SubkeySaveRequest(GameSaveKeyId.PLAYER_FLAGS, GameSaveKeySubkeyId.PLAYER_FLAGS_HAS_SEEN_MASS_PACK_OPENING_TOOLTIP, Profile.SeenMassPackTooltip ? 1L : 0L));
         SaveLocal(new GameSaveDataManager.SubkeySaveRequest(GameSaveKeyId.PLAYER_FLAGS, GameSaveKeySubkeyId.PLAYER_FLAGS_HAS_COMPLETED_APPRENTICE, 1L));
-        Options.SetFormatType(LocalDeckFormat);
         NativeUIProjection.CasualPlayMode = Profile.PrefersCasual;
         Options.SetInRankedPlayMode(!NativeUIProjection.CasualPlayMode);
         if (CollectionManager.Get() != null) throw new InvalidOperationException("CollectionManager was initialized before probe");
@@ -978,21 +981,25 @@ internal static partial class NativeUIProbe
     {
         var displayable = manager.GetDisplayableCardSets();
         var supportedIds = NativeUIProjection.Supported.Concat(Profile.OwnedCards.Where(card => card.Count > 0
-            && NativeUIProjection.IsNativeCollectible(card.Id, Profile)).Select(card => card.Id)).Distinct().OrderBy(id => id).ToArray();
-        var supportedSets = supportedIds.Select(id => DefLoader.Get().GetEntityDef(id).GetCardSet());
+            && NativeUIProjection.IsNativeCollectible(card.Id, Profile)).Select(card => card.Id))
+            .Concat(LocalProfile.IsWildAdmittedCardIds()).Distinct().OrderBy(id => id).ToArray();
+        var supportedSets = supportedIds.Select(id => DefLoader.Get().GetEntityDef(id)).Where(def => def != null).Select(def => def.GetCardSet());
         var union = NativeUIProjection.DisplayableSetIds(displayable.Concat(supportedSets).Select(set => (int)set), Profile.OwnedCards)
             .Select(set => (TAG_CARD_SET)set).ToList();
         displayable.Clear();
         displayable.AddRange(union);
         var wild = new HashSet<TAG_CARD_SET>(GameUtils.GetAllWildPlayableSets());
-        // Local decks are Standard (LocalDeckFormat): without server set-rotation timings no set is rotated offline, so
-        // every displayable set is Standard. An owned card outside it would read as Wild-only, so stop at boot instead.
+        // Local decks are Standard or Wild (LocalDeckFormat): without server set-rotation timings no set is rotated offline.
+        // The Wild pool's Past cards are listed here but never owned (the pool grants them at deck start), so the owned-card
+        // guard below cannot fire for them.
         var standard = new HashSet<TAG_CARD_SET>(GameUtils.GetStandardSets());
         var audit = new List<string> { "id\tsetInt\tsetName\tnativeFormat\trotated\tlegacy\tdisplayable\tallWildMembership\tstandardMembership" };
         var missingOwned = new List<string>();
         foreach (string id in supportedIds)
         {
-            TAG_CARD_SET set = DefLoader.Get().GetEntityDef(id).GetCardSet();
+            var def = DefLoader.Get().GetEntityDef(id);
+            if (def == null) continue;
+            TAG_CARD_SET set = def.GetCardSet();
             bool inDisplayable = displayable.Contains(set), inWild = wild.Contains(set), inStandard = standard.Contains(set);
             audit.Add(id + "\t" + (int)set + "\t" + set + "\t" + GameUtils.GetCardSetFormat(set) + "\t"
                 + GameUtils.IsSetRotated(set) + "\t" + GameUtils.IsLegacySet(set) + "\t" + inDisplayable + "\t" + inWild + "\t" + inStandard);
@@ -1181,10 +1188,19 @@ internal static partial class NativeUIProbe
     }
     private static bool LoanerRuleset(CollectionDeck __instance, ref bool __result)
     {
-        if (!active || !__instance.NetworkContentsLoaded()
-            || !NativeUIProjection.IsExactLoaner(__instance.ID, __instance.HeroCardID, __instance.GetCardsWithCardID())) return true;
-        DeckRuleset ruleset = __instance.GetRuleset();
-        __result = ruleset != null && ruleset.IsDeckValid(__instance, DeckRule.RuleType.PLAYER_OWNS_EACH_COPY);
+        if (!active || !__instance.NetworkContentsLoaded()) return true;
+        string[] ids = __instance.GetCardsWithCardID().ToArray();
+        if (NativeUIProjection.IsExactLoaner(__instance.ID, __instance.HeroCardID, ids))
+        {
+            DeckRuleset ruleset = __instance.GetRuleset();
+            __result = ruleset != null && ruleset.IsDeckValid(__instance, DeckRule.RuleType.PLAYER_OWNS_EACH_COPY);
+            return false;
+        }
+        // A personal Wild deck is owned through the Wild channel, not the ledger: Past cards have a real
+        // ownership count of 0, so PLAYER_OWNS_EACH_COPY would lock the deck in the picker.
+        LocalCustomDeck custom = Profile?.GetDraft(__instance.ID);
+        if (custom == null || !custom.Cards.Any(LocalProfile.IsWildAdmittedCard)) return true;
+        __result = NativeUIProjection.DeckOwned(ids, NativeUIProjection.StartOwned(Profile, ids));
         return false;
     }
     private static bool SkipActive() => !active;
@@ -1381,7 +1397,8 @@ internal static partial class NativeUIProbe
             if (SideboardSignature(custom.Sideboards) != SideboardSignature(ReadSideboards(native)))
                 throw new InvalidOperationException("Native sideboard differs from saved selections.");
             NativeUIProjection.ValidateDraftProjection(native.ID, custom.Name, custom.Hero, custom.Cards.ToArray(),
-                native.Name, NativeBaseHero(native), ids, NativeUIProjection.TotalOwned(Profile));
+                // Wild-admitted cards are owned by the Wild channel at deck start, not by the ledger (LocalProfile.WildDeckOwnedCount).
+                native.Name, NativeBaseHero(native), ids, NativeUIProjection.StartOwned(Profile, custom.Cards));
         }
         if (native.Name != (custom?.Name ?? "Loaner: " + local.Name) || NativeBaseHero(native) != local.Hero
             || !ids.OrderBy(id => id).SequenceEqual(local.CardIds.OrderBy(id => id)))
@@ -1441,7 +1458,8 @@ internal static partial class NativeUIProbe
             }
             if (custom != null)
                 NativeUIProjection.ValidateCustomSelection(native.ID, custom.Hero, custom.Cards.ToArray(),
-                    NativeBaseHero(native), native.GetCardsWithCardID().ToArray(), NativeUIProjection.TotalOwned(Profile));
+                    // Wild-admitted cards are owned by the Wild channel at deck start, not by the ledger (LocalProfile.WildDeckOwnedCount).
+                    NativeBaseHero(native), native.GetCardsWithCardID().ToArray(), NativeUIProjection.StartOwned(Profile, custom.Cards));
             lastSelectedId = native.ID;
             bool casual = NativeUIProjection.CasualPlayMode;
             log.LogInfo((rematch ? "NATIVE_PICKER_REMATCH " : "NATIVE_PICKER_START ") + selected + (casual ? " mode=Casual" : ""));

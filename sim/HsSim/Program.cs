@@ -362,6 +362,9 @@ public static class Program
             || fresh.Seed != old.Seed || fresh.Policy != old.Policy)
             throw new InvalidOperationException($"rebuilt case {fresh.Id} differs from the record {old.Id}");
         fresh.ClonePoints = old.ClonePoints;
+        // A repair reproduces the record it repairs, so it keeps the pool the record was played on. Without this a record
+        // written before Wild mode would be rebuilt on today's derivation and could silently move to the Wild pool.
+        fresh.RandomPoolFormat = old.RandomPoolFormat ?? Simulation.StandardPoolFormat;
         OfflinePoolManifest pools = schema == 3 ? PoolSnapshots.ForReplay(old.PoolManifestHash) : null;
         // A record without the policy version stays on the frozen pools unless it is being renewed.
         Simulation.Finish(fresh, Simulation.Run(fresh, pools: pools, frozenRandomPools: old.RandomPoolPolicyVersion == null && !renewPools));
@@ -377,6 +380,7 @@ public static class Program
             fresh.PoolManifestHash = null;
             fresh.DarkGiftPolicyVersion = null;
             fresh.RandomPoolPolicyVersion = null;
+            fresh.RandomPoolFormat = null;
         }
         Validate(fresh);
         return fresh;

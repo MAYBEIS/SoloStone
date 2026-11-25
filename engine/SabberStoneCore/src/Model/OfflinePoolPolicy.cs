@@ -34,6 +34,12 @@ namespace SabberStoneCore.Model
         public IReadOnlyList<string> ExtraCards => Metas.SingleOrDefault(m => m.Id == ActiveMetaId)?.ExtraCards ?? Array.Empty<string>();
         public string NewestSet => Metas.SingleOrDefault(m => m.Id == ActiveMetaId)?.NewestSet;
         public IReadOnlyList<Member> Members { get; }
+        /// <summary>Wild is the Standard pool plus the historical Past cards; Inactive members (the next meta's
+        /// cards) belong to no pool. Derived from the member scopes, so no catalog meta is added for it.</summary>
+        [field: NonSerialized] public IReadOnlyList<Member> WildPool { get; }
+        /// <summary>The Past members' card ids: cards the Standard pool excludes and only the Wild pool draws.</summary>
+        [field: NonSerialized] public IReadOnlyCollection<string> WildOnlyCardIds { get; }
+        [NonSerialized] private readonly HashSet<string> wildOnlyIds;
         public IReadOnlyList<Dependency> Dependencies { get; }
         public IReadOnlyDictionary<string, string> SourceHashes { get; }
 
@@ -45,6 +51,11 @@ namespace SabberStoneCore.Model
             inactiveSetIds = new HashSet<int>(metas.SelectMany(m => m.SetIds)
                 .Where(pair => !sets.Contains(pair.Key)).Select(pair => pair.Value));
             Sets = Array.AsReadOnly(sets); Members = Array.AsReadOnly(members);
+            // Parse already proved every scope is exactly Standard, Past or Inactive, so this is Standard union Past.
+            WildPool = Array.AsReadOnly(members.Where(m => m.Scope != "Inactive").OrderBy(m => m.DbfId).ToArray());
+            var wildOnly = members.Where(m => m.Scope == "Past").Select(m => m.CardId).OrderBy(id => id, StringComparer.Ordinal).ToArray();
+            WildOnlyCardIds = Array.AsReadOnly(wildOnly);
+            wildOnlyIds = new HashSet<string>(wildOnly, StringComparer.Ordinal);
             Dependencies = Array.AsReadOnly(dependencies);
             SourceHashes = new ReadOnlyDictionary<string, string>(hashes);
         }
@@ -64,6 +75,10 @@ namespace SabberStoneCore.Model
                 return meta != null && meta.ExtraCards.Contains(card.Id);
             return !Metas.SelectMany(m => m.SetIds).Any(pair => pair.Value == (int)card.Set && !sets.Contains(pair.Key));
         }
+
+        /// <summary>True when any of these cards is Wild-only, so the match must draw from the Wild pool. The installed
+        /// manifest owns the one implementation of the rule; a replay asks its own pinned manifest instead.</summary>
+        public bool RequiresWildPool(IEnumerable<Card> cards) => OfflinePoolManifest.Installed.RequiresWildPool(cards);
 
         public bool IsPackEligible(Card card) => card != null && !Metas.Any(m => m.ExtraCards.Contains(card.Id))
             && (Metas.SingleOrDefault(m => m.Id == ActiveMetaId)?.SetIds.Any(p => p.Key != "CORE" && p.Value == (int)card.Set)

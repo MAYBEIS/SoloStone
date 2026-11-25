@@ -274,6 +274,10 @@ public sealed class LocalProfileData
     [XmlIgnore] public bool CasualRatingSpecified { get => CasualRating.HasValue; set { } }
     // Last play mode picked in the native format picker: "Casual", or absent for Standard ranked.
     public string PlayMode;
+    // Deck format picked in the native format picker: "Wild", or absent for Standard. Separate from PlayMode:
+    // Wild is a deck format, not a match mode.
+    public string DeckFormat;
+    public bool ShouldSerializeDeckFormat() => DeckFormat != null;
     public LocalAchievementState Achievements = new LocalAchievementState();
     public string PendingNonMatchAchievementNoticeId;
     public List<string> PendingAchievementToastMatchIds = new List<string>();
@@ -1083,7 +1087,7 @@ public sealed partial class LocalProfile : IDisposable
 
     public void SaveDeck(string name, string hero, IEnumerable<string> ids)
     {
-        LocalDeck deck = LedgerDeck(name, hero, ids, null, true);
+        LocalDeck deck = LedgerDeck(name, hero, ids, null, true, PrefersWild);
         var next = Snapshot();
         if (next.CustomDecks.Count > 1)
             throw new InvalidOperationException("The legacy custom slot is ambiguous with multiple saved decks.");
@@ -1125,7 +1129,7 @@ public sealed partial class LocalProfile : IDisposable
         if (!data.OwnedRecipes.Contains(recipeId)) throw new InvalidOperationException("Recipe is not owned.");
         LocalShop.Default.Recipe(recipeId);
         if (deck == null) throw new ArgumentNullException(nameof(deck));
-        LocalDeck draft = LedgerDeck(deck.Name, deck.Hero, deck.Cards, deck.Sideboards, false);
+        LocalDeck draft = LedgerDeck(deck.Name, deck.Hero, deck.Cards, deck.Sideboards, false, PrefersWild);
         if (!LocalCardCatalog.WithinCopyLimits(draft.CardIds)) throw new InvalidOperationException("Deck exceeds the playable copy limit across printings.");
         var matching = MatchingRecipeDeck(data, recipeId, draft.Hero, draft.CardIds, deck.Sideboards);
         if (matching != null) return Copy(matching);
@@ -1152,7 +1156,7 @@ public sealed partial class LocalProfile : IDisposable
     {
         if (sortOrder < 0) throw new ArgumentOutOfRangeException(nameof(sortOrder));
         var boards = (sideboards ?? GetDraft(id)?.Sideboards ?? Enumerable.Empty<LocalSideboard>()).Select(Copy).ToList();
-        LocalDeck draft = LedgerDeck(name, hero, ids, boards, false);
+        LocalDeck draft = LedgerDeck(name, hero, ids, boards, false, PrefersWild);
         if (!LocalCardCatalog.WithinCopyLimits(draft.CardIds))
             throw new InvalidOperationException("Deck exceeds the playable copy limit across printings.");
         var next = Snapshot();
@@ -1171,7 +1175,7 @@ public sealed partial class LocalProfile : IDisposable
         var next = Snapshot();
         LocalCustomDeck saved = next.CustomDecks.SingleOrDefault(deck => deck.Id == id)
             ?? throw new InvalidOperationException("Saved draft does not exist.");
-        LocalDeck draft = LedgerDeck(name, saved.Hero, saved.Cards, saved.Sideboards, false);
+        LocalDeck draft = LedgerDeck(name, saved.Hero, saved.Cards, saved.Sideboards, false, PrefersWild);
         if (cosmetics != null) ApplyCosmetics(saved, ValidDeckCosmetics(next, draft.Hero, cosmetics, profileOptions.AllCosmetics));
         saved.Name = draft.Name;
         Commit(next);
@@ -1302,7 +1306,8 @@ public sealed partial class LocalProfile : IDisposable
         var deck = data.CustomDecks.SingleOrDefault(row => row.Id == id);
         if (deck == null) return false;
         try {
-            ValidateDeckOwnership(deck.CardEntries.Concat(deck.Sideboards.SelectMany(board => board.CardEntries)), false);
+            ValidateDeckOwnership(deck.CardEntries.Concat(deck.Sideboards.SelectMany(board => board.CardEntries)), false,
+                PrefersWild || deck.Cards.Any(IsWildAdmittedCard));
             return true;
         } catch (InvalidOperationException) { return false; }
     }
@@ -1312,10 +1317,11 @@ public sealed partial class LocalProfile : IDisposable
         var deck = GetDraft(id);
         if (deck == null) return false;
         try {
-            PlayableDeck(deck.Name, deck.Hero, deck.Cards, deck.Sideboards);
+            PlayableDeck(deck.Name, deck.Hero, deck.Cards, deck.Sideboards, PrefersWild);
             // Retail CollectionDeck.CanCardBeAddedAsOwned (254477): a sideboard copy is owned only beyond the main deck's
             // copies, for every sideboard (Beatrix and Underbelly contraband alike), so ownership counts both together.
-            ValidateDeckOwnership(deck.CardEntries.Concat(deck.Sideboards.SelectMany(board => board.CardEntries)), true);
+            ValidateDeckOwnership(deck.CardEntries.Concat(deck.Sideboards.SelectMany(board => board.CardEntries)), true,
+                PrefersWild || deck.Cards.Any(IsWildAdmittedCard));
             return true;
         } catch (ArgumentException) { return false; } catch (InvalidOperationException) { return false; }
     }
@@ -1323,7 +1329,7 @@ public sealed partial class LocalProfile : IDisposable
     public LocalDeck ResolveCustomDeck()
     {
         LocalCustomDeck deck = CustomDeck;
-        return deck == null ? null : PlayableDeck(deck.Name, deck.Hero, deck.Cards, deck.Sideboards);
+        return deck == null ? null : PlayableDeck(deck.Name, deck.Hero, deck.Cards, deck.Sideboards, PrefersWild);
     }
 
     /// <summary>Owned copies of one version; the default and Collection remain Normal-only.</summary>
@@ -1385,11 +1391,12 @@ public sealed partial class LocalProfile : IDisposable
         ValidateDeckEntries(entries, CurrentVersion);
         var boards = (sideboards ?? GetDraft(id)?.Sideboards ?? new List<LocalSideboard>()).Select(Copy).ToList();
         foreach (var board in boards) ValidateDeckEntries(board?.CardEntries, CurrentVersion);
-        var draft = LedgerDeck(name, hero, entries.Select(card => card.Id), boards, false);
+        var draft = LedgerDeck(name, hero, entries.Select(card => card.Id), boards, false, PrefersWild);
         if (!LocalCardCatalog.WithinCopyLimits(draft.CardIds))
             throw new InvalidOperationException("Deck exceeds the playable copy limit across printings.");
         // Normal copies may be missing (drafts keep incomplete decks); only the premium versions must be owned.
-        ValidateDeckOwnership(entries.Concat(boards.SelectMany(board => board.CardEntries)), false);
+        ValidateDeckOwnership(entries.Concat(boards.SelectMany(board => board.CardEntries)), false,
+            PrefersWild || entries.Any(card => IsWildAdmittedCard(card.Id)));
         var next = Snapshot();
         var saved = next.CustomDecks.SingleOrDefault(deck => deck.Id == id)
             ?? throw new InvalidOperationException("Saved draft does not exist.");
@@ -1410,6 +1417,11 @@ public sealed partial class LocalProfile : IDisposable
             : Math.Max(premium.TryGetValue(PremiumKey(id, version), out int stored) ? stored : 0,
                 allCosmetics ? CheatPremiumCount(id, version) : 0);
     }
+
+    // Wild mode owns the manifest's Past cards through its own admission channel: a deck copy of a Wild-admitted
+    // card is always owned, so the start check must not read the Standard ledger for it.
+    internal static Func<string, int, int> WildDeckOwnedCount(Func<string, int, int> owned) =>
+        (id, version) => version == 0 && IsWildAdmittedCard(id) ? Math.Max(owned(id, version), LocalEconomy.MaximumPlayset) : owned(id, version);
 
     internal static List<string> RepairDeckPremiums(LocalProfileData profile, bool allCosmetics = false)
     {
@@ -1433,13 +1445,16 @@ public sealed partial class LocalProfile : IDisposable
     {
         var deck = data.CustomDecks.SingleOrDefault(row => row.Id == id);
         if (deck == null) throw new InvalidOperationException("Saved draft does not exist.");
-        return LocalCrafting.MissingDeckSlots(deck, DeckOwnedCount(data, profileOptions.AllCosmetics));
+        var owned = DeckOwnedCount(data, profileOptions.AllCosmetics);
+        if (PrefersWild || deck.Cards.Any(IsWildAdmittedCard)) owned = WildDeckOwnedCount(owned);
+        return LocalCrafting.MissingDeckSlots(deck, owned);
     }
 
-    private void ValidateDeckOwnership(IEnumerable<LocalDeckCard> cards, bool normalToo)
+    private void ValidateDeckOwnership(IEnumerable<LocalDeckCard> cards, bool normalToo, bool wild = false)
     {
         var list = cards.ToList();
         var owned = DeckOwnedCount(data, profileOptions.AllCosmetics);
+        if (wild) owned = WildDeckOwnedCount(owned);
         var deck = new LocalCustomDeck { CardEntries = list };
         if (LocalCrafting.MissingDeckSlots(deck, owned, normalToo) > 0)
             throw new InvalidOperationException(normalToo ? "The local collection does not own this deck card."
@@ -1732,7 +1747,7 @@ public sealed partial class LocalProfile : IDisposable
     private static IEnumerable<LocalCustomDeck> VisibleDrafts(LocalProfileData profile)
     {
         return profile.CustomDecks.Where(deck => LocalDecks.PlayerHeroes.Contains(deck.Hero)
-            && deck.Cards.All(id => LedgerCardIndex.ContainsKey(id) || LocalDecks.IsCustomCard(id))
+            && deck.Cards.All(id => LedgerCardIndex.ContainsKey(id) || LocalDecks.IsCustomCard(id) || IsWildAdmittedCard(id))
             && deck.Sideboards.SelectMany(row => row.Cards).All(id => LocalCardCatalog.InActiveMeta(SabberStoneCore.Model.Cards.FromId(id))))
             .OrderBy(deck => deck.SortOrder).ThenBy(deck => deck.Id).Take(MaximumCustomDecks);
     }
@@ -1837,7 +1852,7 @@ public sealed partial class LocalProfile : IDisposable
         PackCounters = data.PackCounters.Select(Copy).ToList(),
         DustBalance = data.DustBalance, CraftSequence = data.CraftSequence, LastCraft = Copy(data.LastCraft),
         LadderState = Copy(data.LadderState), LadderRuleVersion = data.LadderRuleVersion,
-        CasualRating = data.CasualRating, PlayMode = data.PlayMode,
+        CasualRating = data.CasualRating, PlayMode = data.PlayMode, DeckFormat = data.DeckFormat,
         LadderCalibration = data.LadderCalibration == null ? null : new LocalLadderCalibration {
             Version = data.LadderCalibration.Version, MatchCount = data.LadderCalibration.MatchCount
         },
@@ -2049,8 +2064,11 @@ public sealed partial class LocalProfile : IDisposable
                 foreach (var board in saved.Sideboards) ValidateDeckEntries(board?.CardEntries, profile.Version);
                 if (saved.Cards == null || saved.Cards.Count > LocalDecks.DraftLimit(saved.Cards))
                     throw new InvalidOperationException("Local draft exceeds its deck-size limit.");
-                if (profile.Version >= 10 && NeedsExpandedDeckCatalog(saved.Cards))
-                    LocalShop.ValidateDeck(saved.Name, saved.Hero, saved.Cards.Where(id => !LocalCardCatalog.IsCore(id)), saved.Sideboards, false, true, standardOnly: false);
+                // A saved Wild deck holds manifest Past cards, which the Standard stored-draft check rejects as unknown.
+                // The profile's format decides a row too: a Wild deck may keep its only Past card in a sideboard.
+                bool wild = WildRules.IsWild(profile.DeckFormat) || saved.Cards.Any(IsWildAdmittedCard);
+                if (profile.Version >= 10 && (wild || NeedsExpandedDeckCatalog(saved.Cards)))
+                    LocalShop.ValidateDeck(saved.Name, saved.Hero, saved.Cards.Where(id => !LocalCardCatalog.IsCore(id)), saved.Sideboards, false, true, standardOnly: false, wild: wild);
                 else LocalDecks.ValidateStoredDraft(saved.Name, saved.Hero, saved.Cards);
                 new LocalDeck(saved.Name, saved.Hero, saved.Cards.ToArray()).WithSideboards(saved.Sideboards, allowInactive: true);
                 if (profile.Version < 10) ValidateSideboardOwnership(saved.Sideboards, OwnedCollection(profile));

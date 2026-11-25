@@ -16,6 +16,8 @@ internal static partial class NativeUIProbe
         InitializeSideboardSubset(harmony);
         Hook(harmony, typeof(DeckRule_CountCopiesOfEachCard), "GetCopiesInDeck", nameof(LocalDeckCopyCount),
             new[] { typeof(string), typeof(CollectionDeck), typeof(bool) });
+        Hook(harmony, typeof(CollectionDeck), "CanCardBeAddedAsOwned", nameof(LocalWildOwnsCard),
+            new[] { typeof(string), typeof(TAG_PREMIUM) });
     }
 
     // Use the same counterpart groups for the native editor and its invalid-deck UI.
@@ -24,6 +26,15 @@ internal static partial class NativeUIProbe
         if (!active || __1 == null || __1.HasSideboardCards || !NativeUIProjection.IsPersonalId(__1.ID)
             || Profile.GetDraft(__1.ID) == null || !LocalDecks.CustomCards.Any(card => card.Id == __0)) return true;
         __result = NativeUIProjection.DeckCopyCount(__1.GetCardsWithCardID(), __0);
+        return false;
+    }
+
+    // Wild decks own their admitted cards at deck start; the native collection still reports zero copies for them.
+    private static bool LocalWildOwnsCard(string __0, TAG_PREMIUM __1, ref bool __result)
+    {
+        if (!active || __1 != TAG_PREMIUM.NORMAL || LocalDeckFormat != FormatType.FT_WILD) return true;
+        if (!NativeUIProjection.WildOwnsCard(__0)) return true;
+        __result = true;
         return false;
     }
 
@@ -581,7 +592,12 @@ internal static partial class NativeUIProbe
             && actual.RandomHeroUseFavorite == expected.RandomHeroUseFavorite && actual.SeasonId == expected.SeasonId
             && actual.BrawlLibraryItemId == expected.BrawlLibraryItemId && actual.NeedsName == expected.NeedsName
             && actual.SortOrder == expected.SortOrder && actual.Rune1 == expected.Rune1 && actual.Rune2 == expected.Rune2
-            && actual.Rune3 == expected.Rune3 && actual.FormatType == expected.FormatType && actual.Locked == expected.Locked
+            && actual.Rune3 == expected.Rune3 && actual.Locked == expected.Locked
+            // The header format follows the picker, not the deck: headers are projected at startup before
+            // Options.SetFormatType runs, so a Wild picker leaves FT_STANDARD headers behind. Both values are
+            // legal envelopes (SupportedNativeEnvelope accepts either), so the format must not decide exactness.
+            && (actual.FormatType == FormatType.FT_STANDARD || actual.FormatType == FormatType.FT_WILD)
+            && (expected.FormatType == FormatType.FT_STANDARD || expected.FormatType == FormatType.FT_WILD)
             && actual.SourceType == expected.SourceType && actual.Pet == expected.Pet && actual.PetVariant == expected.PetVariant
             && actual.RandomPetUseFavorite == expected.RandomPetUseFavorite;
     }

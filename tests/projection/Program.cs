@@ -1412,9 +1412,10 @@ Check(NativeUIProjection.FormatPickerMode(new[] { "WILD_BUTTON_CLICKED" }, new[]
     && NativeUIProjection.FormatPickerMode(new[] { "HIDE" }, new[] { "Clickable", "Standard_Wild_Group", "Classic" }) == "CLASSIC"
     && NativeUIProjection.FormatPickerMode(null, new[] { "Background" }) == null,
     "format picker buttons classify by their own events first, then the nearest single-mode name");
-Check(!NativeUIProjection.IsDisabledFormatMode("STANDARD") && !NativeUIProjection.IsDisabledFormatMode("CASUAL")
-    && !NativeUIProjection.IsDisabledFormatMode(null) && new[] { "WILD", "CLASSIC", "TWIST" }.All(NativeUIProjection.IsDisabledFormatMode),
-    "Standard and Casual stay selectable; Wild, Classic and Twist are shown but disabled");
+Check(!NativeUIProjection.IsDisabledFormatMode("STANDARD") && !NativeUIProjection.IsDisabledFormatMode("WILD")
+    && !NativeUIProjection.IsDisabledFormatMode("CASUAL") && !NativeUIProjection.IsDisabledFormatMode(null)
+    && new[] { "CLASSIC", "TWIST" }.All(NativeUIProjection.IsDisabledFormatMode),
+    "Standard, Wild and Casual stay selectable; Classic and Twist are shown but disabled");
 var dimmedColor = NativeUIProjection.DisabledFormatTint((1f, 0.8f, 0.6f, 0.9f), (0.2f, 0.2f, 0.2f, 1f));
 var dimmedTint = NativeUIProjection.DisabledFormatTint(null, (1f, 1f, 1f, 0.5f));
 Check(dimmedColor.HasValue && dimmedColor.Value.Property == "_Color"

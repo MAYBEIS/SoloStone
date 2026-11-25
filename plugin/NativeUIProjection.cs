@@ -136,10 +136,13 @@ internal static class NativeUIProjection
         active && LocalCoreProgression.IsAvailable(cardId);
 
     // This bypasses unavailable native event timing; collection ownership is checked separately.
+    // Wild-admitted cards are playable in the native editor even though they are never owned: the Wild
+    // channel grants them at deck start (LocalProfile.WildDeckOwnedCount / NativeUIProjection.StartOwned).
     private static readonly Lazy<HashSet<string>> testStandardIds = new Lazy<HashSet<string>>(() =>
         new HashSet<string>(LocalDecks.TestStandardCardIds, StringComparer.Ordinal));
     internal static bool ForcesTestPlayability(bool active, string cardId) =>
-        active && cardId != null && (testStandardIds.Value.Contains(cardId) || LocalDecks.IsLegalDeckbuildingCard(cardId));
+        active && cardId != null && (testStandardIds.Value.Contains(cardId) || LocalDecks.IsLegalDeckbuildingCard(cardId)
+            || LocalProfile.IsWildAdmittedCard(cardId));
 
     // A deck's hero card goes through the same event check when its deck box is opened or picked. The client ties
     // Illidan (HERO_10) to the "bt_gameplay" event, which is never active offline, so Demon Hunter decks showed
@@ -158,6 +161,10 @@ internal static class NativeUIProjection
 
     internal static int DeckCopyCount(IEnumerable<string> ids, string cardId) =>
         ids.Count(id => LocalCardCatalog.CopyGroup(id) == LocalCardCatalog.CopyGroup(cardId));
+
+    // Wild decks own their admitted cards at deck start (LocalProfile.WildDeckOwnedCount), so the native editor must
+    // let them into a Wild deck even though CollectionManager reports zero copies. The format gate lives in the caller.
+    internal static bool WildOwnsCard(string cardId) => LocalProfile.IsWildAdmittedCard(cardId);
 
     // Retail caps the native deck tray at 27 decks (DeckTrayDeckListContent 27 slots + 2 spare sections, picker pages
     // are dynamic). SoloStone raises the tray to NativeDeckLimit (NativeDeckLimits transpiles the native literals).
@@ -218,7 +225,7 @@ internal static class NativeUIProjection
     // entry for each id. Cards outside it exist natively only once owned (from the collection packet) and only in the
     // owned version, so they never list as missing and CanUpgradeCardToGolden answers NotUpgradable.
     internal static List<string> NativeCollectiblePool(IEnumerable<string> craftable, IEnumerable<LocalCardCount> owned = null) => Supported.Concat(CosmeticHeroPool)
-        .Concat(craftable ?? Enumerable.Empty<string>()).Concat(OwnedGrantOnlyIds(owned))
+        .Concat(craftable ?? Enumerable.Empty<string>()).Concat(OwnedGrantOnlyIds(owned)).Concat(WildAdmittedIds())
         .Distinct(StringComparer.Ordinal).OrderBy(id => id).ToList();
     private static bool AdmittedGrantOnly(string id) => LocalWelcomeGift.HistoricalCardIds.Contains(id)
         && LocalProfile.KnownLedgerCard(id) && LocalCardCatalog.InActiveMeta(SabberStoneCore.Model.Cards.FromId(id));
@@ -228,7 +235,12 @@ internal static class NativeUIProjection
     // (blue ghosts) into invalid ones. Keep the historical predicate and only add owned admitted grants.
     internal static bool IsNativeCollectible(string id, LocalProfile profile) =>
         Supported.Contains(id) || LocalDecks.TestStandardCardIds.Contains(id) || CosmeticHeroPool.Contains(id)
+        || WildAdmittedIds().Contains(id)
         || (AdmittedGrantOnly(id) && profile.TotalOwnedCount(id) > 0);
+    // The Wild pool's Past cards: visible and deckable in Wild, never owned (the pool grants them at deck start).
+    private static HashSet<string> WildAdmittedIds() => wildAdmittedIds.Value;
+    private static readonly Lazy<HashSet<string>> wildAdmittedIds = new Lazy<HashSet<string>>(() =>
+        new HashSet<string>(LocalProfile.IsWildAdmittedCardIds(), StringComparer.Ordinal));
     internal static readonly HashSet<string> Supported = new HashSet<string>(LocalEconomy.Catalog.Select(c => c.Id)
 #if STANDARD_PROOF
         .Concat(ProofDecks.Get("proof-mage").CardIds).Concat(ProofDecks.Get("proof-warrior").CardIds)
@@ -236,6 +248,7 @@ internal static class NativeUIProjection
         , StringComparer.Ordinal);
     private static readonly Dictionary<string, SabberStoneCore.Model.Card> PreviewCards = LocalDecks.CustomCards
         .Concat(LocalDecks.TestStandardCardIds.Select(SabberStoneCore.Model.Cards.FromId))
+        .Concat(LocalProfile.IsWildAdmittedCardIds().Select(SabberStoneCore.Model.Cards.FromId).Where(card => card != null))
 #if ENGINE_SOURCE
         .Concat(SabberStoneCore.CardSets.Client.StandardSets.CollectibleIds.Select(SabberStoneCore.Model.Cards.FromId)
             .Where(card => card.Type == SabberStoneCore.Enums.CardType.LOCATION
@@ -1031,10 +1044,30 @@ internal static class NativeUIProjection
                 throw new InvalidOperationException("Native loaner differs from immutable local deck.");
         }
     }
+    // Start-time ownership for a personal deck: Wild-admitted cards are owned by the Wild channel, so a deck that
+    // already passed IsDeckComplete must not fail this second, ledger-based check.
+    internal static Dictionary<string, int> StartOwned(LocalProfile profile, IEnumerable<string> ids)
+    {
+        var owned = TotalOwned(profile);
+        foreach (string id in ids ?? Enumerable.Empty<string>())
+            if (LocalProfile.IsWildAdmittedCard(id))
+                owned[id] = Math.Max(owned.TryGetValue(id, out int count) ? count : 0, LocalEconomy.MaximumPlayset);
+        return owned;
+    }
+    // The picker asks whether a deck is owned through PLAYER_OWNS_EACH_COPY. A Wild deck is owned through
+    // StartOwned (the Wild channel), never through the ledger, so the check takes the owned map as a parameter.
+    internal static bool DeckOwned(IEnumerable<string> ids, IReadOnlyDictionary<string, int> owned)
+    {
+        if (ids == null || owned == null) return false;
+        string[] deckIds = ids.ToArray();
+        var deckOwned = LocalDecks.WithDeckCompanions(owned, deckIds);
+        return deckIds.Length == LocalDecks.DeckSize(deckIds)
+            && deckIds.GroupBy(id => id).All(group => deckOwned.TryGetValue(group.Key, out int count) && count >= group.Count());
+    }
     // Start-time check of a personal deck: ownership here is the native total across versions
     // (per-version ownership is LocalProfile.IsDeckComplete's job, run before this).
     internal static void ValidateCustomStart(LocalProfile profile, long nativeId, LocalCustomDeck saved, LocalDeck resolved) =>
-        ValidateCustomSelection(nativeId, saved.Hero, saved.Cards.ToArray(), resolved.Hero, resolved.CardIds.ToArray(), TotalOwned(profile));
+        ValidateCustomSelection(nativeId, saved.Hero, saved.Cards.ToArray(), resolved.Hero, resolved.CardIds.ToArray(), StartOwned(profile, resolved.CardIds));
     internal static void ValidateCustomSelection(long nativeId, string savedHero, string[] savedIds,
         string nativeHero, string[] nativeIds, Dictionary<string, int> owned)
     {
@@ -1094,8 +1127,8 @@ internal static class NativeUIProjection
         }
         return null;
     }
-    // SoloStone plays Standard ranked and Standard Casual (#37): every other picker mode stays visible but disabled.
-    internal static bool IsDisabledFormatMode(string mode) => mode != null && mode != "STANDARD" && mode != "CASUAL";
+    // SoloStone plays Standard, Wild and Casual (#37, Wild pool = Standard + Past): Classic and Twist stay visible but disabled.
+    internal static bool IsDisabledFormatMode(string mode) => mode != null && mode != "STANDARD" && mode != "WILD" && mode != "CASUAL";
     // The native picker's Standard/Casual choice (NativeFormatLock.StandardMode keeps it; boot restores the save's
     // LocalProfile.PrefersCasual). IN_RANKED_PLAY_MODE reads its inverse, so the client renders Casual natively.
     internal static bool CasualPlayMode;

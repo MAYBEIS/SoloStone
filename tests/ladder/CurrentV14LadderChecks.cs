@@ -20,6 +20,7 @@ internal static class CurrentV14LadderChecks
             AchievementLadderChecks.Run(root);
             RivalResultsChecks.Run(root);
             CasualModeChecks.Run(root);
+            WildFormatChecks.Run(root);
             Console.WriteLine("PASS casual mode: no rank change, Ranked rewards and XP, hidden Casual rating, results, preference, tamper, portraits");
         }
         finally { Directory.Delete(root, true); }

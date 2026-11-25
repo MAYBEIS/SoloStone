@@ -27,8 +27,14 @@ namespace SabberStoneCore.Model
         public IReadOnlyList<string> PackEligibleSets => Array.AsReadOnly(Sets.Where(s => s != "CORE").ToArray());
         public IReadOnlyList<OfflinePoolPolicy.Member> Standard { get; }
         public IReadOnlyList<OfflinePoolPolicy.Member> Past { get; }
+        [NonSerialized] private readonly HashSet<string> wildOnlyIds;
         public string CatalogDigest { get; }
         public string Hash { get; }
+
+        /// <summary>True when any of these cards is Wild-only (a Past member), so the match draws from the Wild pool.
+        /// Derived from this manifest's own membership, so a replay's pool format and pool content share one source.</summary>
+        public bool RequiresWildPool(IEnumerable<Card> cards) =>
+            cards != null && cards.Any(card => card != null && wildOnlyIds.Contains(card.Id));
 
         internal static Card Definition(OfflinePoolPolicy.Member member)
         {
@@ -55,6 +61,7 @@ namespace SabberStoneCore.Model
                 throw new InvalidDataException("Duplicate/conflicting manifest identity");
             Standard = Array.AsReadOnly(members.Where(m => m.Scope == "Standard").ToArray());
             Past = Array.AsReadOnly(members.Where(m => m.Scope == "Past").ToArray());
+            wildOnlyIds = new HashSet<string>(Past.Select(m => m.CardId), StringComparer.Ordinal);
 
             var metadata = new StringBuilder("offline-pool-metadata\n");
             Record(metadata, "client-build", policy.ClientBuild);
