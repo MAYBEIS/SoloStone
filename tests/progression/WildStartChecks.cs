@@ -265,8 +265,34 @@ internal static class WildStartChecks
         finally { Directory.Delete(root, true); }
     }
 
+    // The match gate itself: LocalProfile.Begin refuses a personal deck through IsDeckComplete (LocalProfile.cs:717),
+    // and that ownership step is where a Wild deck's Past card (real ledger copies: 0) used to be charged as missing.
+    internal static void WildStart_MatchGateAdmitsPastCard()
+    {
+        string root = Path.Combine(Path.GetTempPath(), "hs-wildstart-" + Guid.NewGuid());
+        Directory.CreateDirectory(root);
+        try
+        {
+            string path = Path.Combine(root, "match.xml");
+            using (var profile = new LocalProfile(path))
+            {
+                profile.SetPreferredFormat(true);
+                var cards = LocalDecks.Get("mage").CardIds;
+                cards[0] = PastCard;
+                profile.SaveDeck("Wild match", "HERO_08", cards);
+                long id = profile.CustomDeck.Id;
+                Check(profile.OwnedCount(PastCard) == 0, "premise: the Past card has no ledger copies");
+                Check(profile.PrefersWild, "premise: the profile plays Wild");
+                var started = profile.Begin("custom:" + id, "priest", 1);
+                Check(started != null && started.Deck == "custom:" + id, "a Wild deck must start a match");
+            }
+        }
+        finally { Directory.Delete(root, true); }
+    }
+
     internal static void Run()
     {
+        WildStart_MatchGateAdmitsPastCard();
         WildStart_PastCardDeckIsComplete();
         WildStart_StandardDeckStillNeedsOwnership();
         WildStart_StartOwnedRaisesOnlyWildCards();
