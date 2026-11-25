@@ -1023,20 +1023,21 @@ public sealed partial class LocalProfile
     private static bool NeedsExpandedDeckCatalog(IEnumerable<string> ids) {
         return ids.Any(id => KnownLedgerCard(id) && !LocalDecks.IsCustomCard(id));
     }
-    internal static LocalDeck LedgerDeck(string name, string hero, IEnumerable<string> ids, IEnumerable<LocalSideboard> sideboards, bool complete) {
+    internal static LocalDeck LedgerDeck(string name, string hero, IEnumerable<string> ids, IEnumerable<LocalSideboard> sideboards, bool complete, bool wild = false) {
         var cards = ids?.ToArray() ?? throw new ArgumentNullException(nameof(ids));
-        // A deck holding a Wild-only card is a Wild deck: it takes the ledger path, which admits those cards.
-        bool wild = cards.Any(IsWildAdmittedCard);
-        if (!wild && !NeedsExpandedDeckCatalog(cards)) return (complete ? LocalDecks.Custom(name, hero, cards) : LocalDecks.Draft(name, hero, cards)).WithSideboards(sideboards, complete);
-        LocalShop.ValidateDeck(name, hero, cards, sideboards, complete, standardOnly: false, wild: wild);
+        // A deck holding a Wild-only card, or stored by a Wild profile, is a Wild deck: it takes the ledger path,
+        // which admits those cards. Main-deck inference alone misses a Past card kept in a sideboard row.
+        bool wildDeck = wild || cards.Any(IsWildAdmittedCard);
+        if (!wildDeck && !NeedsExpandedDeckCatalog(cards)) return (complete ? LocalDecks.Custom(name, hero, cards) : LocalDecks.Draft(name, hero, cards)).WithSideboards(sideboards, complete);
+        LocalShop.ValidateDeck(name, hero, cards, sideboards, complete, standardOnly: false, wild: wildDeck);
         return new LocalDeck(name, hero, cards).WithSideboards(sideboards, complete);
     }
     // The one card universe of a complete personal deck: deck completeness, the start checks and the match itself
     // all use it, so a deck the builder accepts can start (LocalDecks.Custom alone misses pack cards such as CATA_485).
-    internal static LocalDeck PlayableDeck(string name, string hero, IEnumerable<string> ids, IEnumerable<LocalSideboard> sideboards) {
+    internal static LocalDeck PlayableDeck(string name, string hero, IEnumerable<string> ids, IEnumerable<LocalSideboard> sideboards, bool wild = false) {
         // The expanded ledger path accepts every stored hero; a match needs an implemented one, as Custom requires.
         if (!LocalDecks.PlayerHeroes.Contains(hero)) throw new InvalidOperationException("Unsupported local hero.");
-        return LedgerDeck(name, hero, ids, sideboards, true);
+        return LedgerDeck(name, hero, ids, sideboards, true, wild);
     }
     private static readonly Lazy<EngineCard[]> ledgerCards = new Lazy<EngineCard[]>(() => LocalCardCatalog.Current
         .Concat(LocalShop.StandardCollectionCards)

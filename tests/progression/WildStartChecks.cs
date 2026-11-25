@@ -329,8 +329,40 @@ internal static class WildStartChecks
             false, false, false, true);
     }
 
+    // A Wild deck keeps its Past card in a sideboard row: the deck's format, not only its main deck, decides
+    // admission. A fresh save owns the main deck (All cards) but has no ledger copy of the Past sideboard card.
+    internal static void WildStart_WildDeckSideboardPastCardStarts()
+    {
+        string root = Path.Combine(Path.GetTempPath(), "hs-wildstart-" + Guid.NewGuid());
+        Directory.CreateDirectory(root);
+        try
+        {
+            string path = Path.Combine(root, "wild-sideboard.xml");
+            var options = new ProfileOptions { AllCards = true };
+            using (var profile = new LocalProfile(path, options)) profile.PersistNewProfile(options);
+            using (var profile = new LocalProfile(path, options))
+            {
+                profile.SetPreferredFormat(true);
+                var cards = LocalDecks.Get("paladin").CardIds;
+                cards[0] = "JAIL_397";
+                var boards = new[] { new LocalSideboard { Source = "JAIL_397", Cards = new List<string> { PastSideCard } } };
+                Check(LocalProfile.IsWildAdmittedCard(PastSideCard), "premise: the sideboard fixture is Wild-admitted");
+                Check(profile.OwnedCount(PastSideCard) == 0, "premise: the Past sideboard card has no ledger copies");
+                Check(profile.PrefersWild, "premise: the profile plays Wild");
+                var draft = profile.CreateDraft("Wild sideboard", "HERO_04");
+                profile.SaveDraft(draft.Id, "Wild sideboard", "HERO_04", cards, 0, boards);
+                Check(profile.IsDeckComplete(draft.Id), "a Wild deck must be complete with a Past card in its sideboard");
+                var started = profile.Begin("custom:" + draft.Id, "mage", 1);
+                Check(started != null && started.Deck == "custom:" + draft.Id,
+                    "a Wild deck with a Past sideboard card must start a match");
+            }
+        }
+        finally { Directory.Delete(root, true); }
+    }
+
     internal static void Run()
     {
+        WildStart_WildDeckSideboardPastCardStarts();
         WildStart_MatchGateAdmitsPastCard();
         WildStart_PastCardDeckIsComplete();
         WildStart_StandardDeckStillNeedsOwnership();
