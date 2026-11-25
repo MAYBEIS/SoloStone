@@ -51,6 +51,7 @@ if (args.Length == 0)
     CraftingChecks.Run();
     WildOwnershipChecks.Run();
     WildStartChecks.Run();
+    WildStartPastOwnedChecks.Run();
     WildStartE2EChecks.Run();
     StandardChannelGuardChecks.Run();
     TurnTimerOptionChecks.Run();
