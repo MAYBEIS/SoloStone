@@ -8,6 +8,10 @@ internal static class WildStartChecks
     // BE_000 is a manifest Inactive member: it belongs to no pool, so the Wild channel must never admit it.
     private const string InactiveCard = "BE_000";
 
+    // GVG_058 (Shielded Minibot) is a 2-cost paladin minion and a manifest Past member, so it passes Beatrix's
+    // sideboard rule in every format: only the Wild admission gate can keep it out of a Standard deck.
+    private const string PastSideCard = "GVG_058";
+
     // A saved Wild deck must be startable: ownership is satisfied by the Wild admission channel, not the ledger.
     internal static void WildStart_PastCardDeckIsComplete()
     {
@@ -290,6 +294,41 @@ internal static class WildStartChecks
         finally { Directory.Delete(root, true); }
     }
 
+    // A Standard deck must not smuggle a Past card in through its sideboard row.
+    internal static void WildStart_StandardDeckSideboardRejectsPastCard()
+    {
+        var deck = LocalDecks.TestLoaners.Single(candidate => candidate.CardIds.Contains("JAIL_397"));
+        // The loaner is a direct-play fixture: three of its cards are outside the ownership ledger, so this
+        // is the same deck's CardIds without them; the sideboard row is the only Wild leak under test.
+        var cards = deck.CardIds.Where(LocalProfile.KnownLedgerCard).ToList();
+        Check(cards.Count == 27 && cards.Contains("JAIL_397"), "premise: the paladin loaner keeps a legal main deck");
+        var policy = SabberStoneCore.Model.OfflinePoolPolicy.Load();
+        Check(policy.Members.Any(member => member.CardId == PastSideCard && member.Scope == "Past"),
+            "premise: the sideboard fixture is a manifest Past member");
+        Check(LocalProfile.IsWildAdmittedCard(PastSideCard), "premise: the sideboard fixture is Wild-admitted");
+        Check(SabberStoneCore.Actions.DeckbuildingRules.Eligible("JAIL_397",
+                SabberStoneCore.Model.Cards.FromId(PastSideCard), SabberStoneCore.Enums.FormatType.FT_WILD),
+            "premise: the engine accepts the Past card in Beatrix's slot");
+        // The engine ignores the manifest scope for sideboards, so the admission gate is the only thing that can refuse.
+        Check(LocalDecks.SideboardEligible("JAIL_397", PastSideCard),
+            "premise: the sideboard chain accepts the Past card");
+        // The main deck alone is valid: any rejection below comes from the sideboard row.
+        LocalShop.ValidateDeck("Standard sideboard gate", deck.Hero, cards, null, false, false, false, false);
+        bool rejected = false;
+        try
+        {
+            LocalShop.ValidateDeck("Standard sideboard gate", deck.Hero, cards,
+                new[] { new LocalSideboard { Source = "JAIL_397", Cards = new List<string> { PastSideCard } } },
+                false, false, false, false);
+        }
+        catch (InvalidOperationException) { rejected = true; }
+        Check(rejected, "a Standard deck must reject a Past card in its sideboard");
+        // The Wild channel keeps the same selection.
+        LocalShop.ValidateDeck("Wild sideboard gate", deck.Hero, cards,
+            new[] { new LocalSideboard { Source = "JAIL_397", Cards = new List<string> { PastSideCard } } },
+            false, false, false, true);
+    }
+
     internal static void Run()
     {
         WildStart_MatchGateAdmitsPastCard();
@@ -304,5 +343,6 @@ internal static class WildStartChecks
         WildStart_InactiveStaysOutOfWild();
         WildStart_StartValidationOwnsWildCards();
         WildStart_PickerOwnsWildDeck();
+        WildStart_StandardDeckSideboardRejectsPastCard();
     }
 }
