@@ -51,6 +51,7 @@ if (args.Length == 0)
     CraftingChecks.Run();
     WildOwnershipChecks.Run();
     WildStartChecks.Run();
+    WildStartE2EChecks.Run();
     TurnTimerOptionChecks.Run();
     FpsCounterOptionChecks.Run();
     DeckInferenceOptionChecks.Run();
