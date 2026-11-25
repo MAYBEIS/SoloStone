@@ -52,6 +52,7 @@ if (args.Length == 0)
     WildOwnershipChecks.Run();
     WildStartChecks.Run();
     WildStartE2EChecks.Run();
+    StandardChannelGuardChecks.Run();
     TurnTimerOptionChecks.Run();
     FpsCounterOptionChecks.Run();
     DeckInferenceOptionChecks.Run();
